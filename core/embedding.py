@@ -8,7 +8,7 @@ def embed_chunks(
     task_type=Literal["search_document", "search_query"],
     model="nomic-embed-text-v1.5",
     inference_mode="local",
-):
+) -> np.ndarray:
     if isinstance(chunks, str):
         chunks = [chunks]
     embed_res = embed.text(texts=chunks, model=model, task_type=task_type, inference_mode=inference_mode)
