@@ -19,6 +19,10 @@ nltk = "^3.9.1"
 nomic = "^3.1.2"
 gpt4all = "^2.8.2"
 faiss-cpu = "^1.8.0.post1"
+torch = "^2.4.1"
+accelerate = "^1.0.0"
+bitsandbytes = "^0.44.1"
+langchain-community = "^0.3.2"
 
 
 [build-system]
