@@ -10,20 +10,6 @@ def get_headings(file_path: str, pages: list[int]) -> list[str]:
 
     for page in pages:
         content = read_pdf(file_path, pages=[page])
-        prompt = """
-            Read the PDF page containing table of content below and provide the list of headings in JSON format as follows:
-            [
-            {
-                "id": "1",
-                "heading": "Einleitung"
-            },
-            {
-                
-            },
-            ...
-            ]
-            Do not say anything else and don't use markdown. Remember "Inhalt" should not be included to the heading list.\n
-        """
 
         prompt = """
             Read the PDF page containing table of content below and provide the list of headings in JSON format as follows:
@@ -45,15 +31,18 @@ def get_headings(file_path: str, pages: list[int]) -> list[str]:
                 88
                 92"
             
-            Only include the headings that are within the table of contents (i.e. NOT "Inhalt") and only the headings and subheadings up to the second level i.e. 4.1. Don't include subheadings BEYOND the second level i.e. 4.1.1.
-            Do not say anything else and don't use markdown.\n
+            Please ensure the list starts from the very first heading in the content and continues up to the second level of subheadings. Only include headings from the table of contents, excluding "Inhalt." Do not include subheadings beyond the second level (e.g., no 4.1.1). Do not say anything else and don't use markdown. Make sure the response is a valid JSON.\n
+            
         """
         # TODO: Add error handling for invalid JSON format
         response = generate_response(prompt + content)
-        print(response)
-        print("______________________")
+        # print(response)
+        # print("______________________")
         heading_dict_list = json.loads(response)
         headings.extend([d["number"] + ". " + d["heading"] for d in heading_dict_list])
+
+        # Only include the headings that are within the table of contents (i.e. NOT "Inhalt") and only the headings and subheadings up to the second level i.e. 4.1. Don't include subheadings BEYOND the second level i.e. 4.1.1.
+        # Do not say anything else and don't use markdown. Make sure the response is a valid JSON.\n
 
     return headings
 
@@ -94,5 +83,7 @@ def chunk_by_section(
     doc = read_pdf(file_path, pages=content_pages)
 
     headings = get_headings(file_path, pages=toc_pages)
-
+    print("Extracted headings:\n")
+    for heading in headings:
+        print("\n" + heading)
     return postprocess_sections(split_by_headings(doc, headings))
