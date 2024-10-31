@@ -34,7 +34,6 @@ class FaissService:
         else:
             query_embedding = query
 
-        print("Returning top k results...")
         D, I = self.index.search(query_embedding, k)
         return D[0], I[0]
 

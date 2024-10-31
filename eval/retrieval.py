@@ -7,9 +7,6 @@ from services.retrieval import FaissService
 
 
 class Stats:
-    pct: float
-    total: int
-
     def __init__(self, pct: float, total: int):
         self.pct = pct
         self.total = total
@@ -33,12 +30,14 @@ def get_references(query: str) -> list[int]:
                 return question["reference"]
 
 
-def evaluate_single(query: str, retrieved_passages: list[Chunk]) -> Stats:
+def evaluate_single(query: str, retrieved_passages: list[Chunk]) -> Stats | None:
     reference_pages = get_references(query)
     print("Reference pages are: ", reference_pages)
     covered_reference_count = 0
     total_reference_count = len(reference_pages)
 
+    if total_reference_count == 0:
+        return None
     for reference_page in reference_pages:
         for retrieved_passage in retrieved_passages:
             if reference_page in list(range(retrieved_passage.start_page, retrieved_passage.end_page + 1)):
@@ -52,9 +51,6 @@ def evaluate_all(chunks: list[Chunk], faiss_service: FaissService, top_k: int = 
     all_stats = []
 
     for vignette in vignette_yaml["vignettes"]:
-        context = vignette["context"]
-        background = vignette["background"]
-
         for question in vignette["questions"]:
             query_embedding = embed_chunks(question["question"], task_type="search_query")
 
@@ -63,4 +59,4 @@ def evaluate_all(chunks: list[Chunk], faiss_service: FaissService, top_k: int = 
 
             all_stats.append(evaluate_single(question["question"], retrieved_documents))
 
-    return mean([stat.pct for stat in all_stats])
+    return mean([stat.pct for stat in all_stats if stat is not None])
