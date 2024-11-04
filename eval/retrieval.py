@@ -35,7 +35,13 @@ def evaluate_single(query: str, retrieved_passages: list[Chunk]) -> Stats | None
     print("Reference pages are: ", reference_pages)
     covered_reference_count = 0
     total_reference_count = len(reference_pages)
-
+    print(
+        "Retrieved pages are: ",
+        [
+            str(retrieved_passage.start_page) + "-" + str(retrieved_passage.end_page)
+            for retrieved_passage in retrieved_passages
+        ],
+    )
     if total_reference_count == 0:
         return None
     for reference_page in reference_pages:

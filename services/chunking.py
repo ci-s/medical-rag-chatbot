@@ -1,11 +1,31 @@
 import json
 import re
 import time
+from typing import Literal
+from langchain.text_splitter import RecursiveCharacterTextSplitter
+from langchain_experimental.text_splitter import SemanticChunker
+from langchain_nomic import NomicEmbeddings
 
 from thefuzz import fuzz
-from core.pdf_utils import read_pdf
+from core.pdf_utils import read_pdf, get_document
 from core.ollama import generate_response
 from structures.page import Document, Chunk
+
+
+def chunk_by_size(file_path: str, chunk_size: int, pages: list[int], overlap: int = 0) -> list[Chunk]:
+    text_splitter = RecursiveCharacterTextSplitter(chunk_size=chunk_size, chunk_overlap=overlap)
+
+    doc = read_pdf(file_path, pages=pages)
+    docs = text_splitter.create_documents([doc])
+
+    return [Chunk(document.page_content, None, None) for document in docs]
+
+
+def chunk_semantic(file_path: str, pages: list[int]) -> list[Chunk]:
+    doc = read_pdf(file_path, pages=pages)
+    text_splitter = SemanticChunker(NomicEmbeddings(model="nomic-embed-text-v1.5"))
+    chunks = text_splitter.split_text(doc)  # or create_documents using my get_document
+    return [Chunk(chunk, None, None) for chunk in chunks]
 
 
 def get_headings(file_path: str, pages: list[int]) -> list[str]:
@@ -34,7 +54,7 @@ def get_headings(file_path: str, pages: list[int]) -> list[str]:
                 88
                 92"
 
-            Please ensure the list starts from the very first heading in the content and continues up to the second level of subheadings. Only include headings from the table of contents, excluding "Inhalt." Do not include subheadings beyond the second level (e.g., no 4.1.1). Do not say anything else and don't use markdown. Make sure the response is a valid JSON.\n
+            Please ensure the list starts from the very first heading in the content and continues up to the third level of subheadings. Only include headings from the table of contents, excluding "Inhalt." Do not include subheadings beyond the third level (e.g., no 4.1.1.2). Do not say anything else and don't use markdown. Make sure the response is a valid JSON.\n
 
         """
         # TODO: Add error handling for invalid JSON format
@@ -75,9 +95,9 @@ def postprocess_sections(sections: dict[str, str]) -> dict[str, str]:
 def chunk_by_section(
     file_path,
     toc_pages: list[int],
-    content_pages: list[int],
+    pages: list[int],
 ) -> list[Chunk]:
-    doc = read_pdf(file_path, pages=content_pages)
+    doc = read_pdf(file_path, pages=pages)
 
     headings = get_headings(file_path, pages=toc_pages)
     print("Extracted headings:\n")
@@ -149,6 +169,22 @@ def match_chunks_with_pages(
                 print("Timeout")
                 problem_counter += 1
                 break
+    print(f"Problems encountered: {problem_counter}")
 
-        print(chunk.start_page, chunk.end_page)
-        print(chunk.text[:50])
+
+def chunk_document(
+    method: Literal["size", "semantic", "section"], file_path: str, pages: list[int], **kwargs
+) -> list[Chunk]:
+    document = get_document(file_path, pages=pages)
+
+    if method == "size":
+        chunks = chunk_by_size(file_path, **kwargs)
+    elif method == "semantic":
+        chunks = chunk_semantic(file_path, **kwargs)
+    elif method == "section":
+        chunks = chunk_by_section(file_path, **kwargs)
+    else:
+        ValueError("Invalid method")
+
+    print("Number of chunks created: ", len(chunks))
+    return match_chunks_with_pages(chunks, document, pages)
