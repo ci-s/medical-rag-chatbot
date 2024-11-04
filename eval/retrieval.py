@@ -1,5 +1,6 @@
 import yaml
 from statistics import mean
+from typing import Literal
 
 from structures.page import Chunk
 from core.embedding import embed_chunks
@@ -12,7 +13,7 @@ class Stats:
         self.total = total
 
 
-ypath = "../data/fallvignetten.yaml"  # TODO: move to config
+ypath = "../data/fallvignetten_revised.yaml"  # TODO: move to config
 
 with open(ypath, "r") as file:
     vignette_yaml = yaml.safe_load(file)
@@ -53,16 +54,25 @@ def evaluate_single(query: str, retrieved_passages: list[Chunk]) -> Stats | None
     return Stats(pct=covered_reference_count / total_reference_count, total=total_reference_count)
 
 
-def evaluate_all(chunks: list[Chunk], faiss_service: FaissService, top_k: int = 3) -> list[Stats]:
+def evaluate_source(
+    source: Literal["Handbuch", "Antibiotika"],
+    chunks: list[Chunk],
+    faiss_service: FaissService,
+    top_k: int = 3,
+) -> list[Stats]:
     all_stats = []
 
     for vignette in vignette_yaml["vignettes"]:
         for question in vignette["questions"]:
+            if question["source"] != source:
+                continue
             query_embedding = embed_chunks(question["question"], task_type="search_query")
 
             similarity, i = faiss_service.search_index(query_embedding, top_k)
             retrieved_documents = [chunks[idx] for idx in i]
 
             all_stats.append(evaluate_single(question["question"], retrieved_documents))
+
+    print(f"Questions from {source}: {len([all_stats for s in all_stats if s is not None])}")
 
     return mean([stat.pct for stat in all_stats if stat is not None])
