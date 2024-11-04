@@ -13,11 +13,6 @@ from core.pdf_utils import get_document
 from services.chunking import chunk_document
 from eval.retrieval import evaluate_source
 
-# remove
-import os
-
-os.environ["NOMIC_API_KEY"] = "nk-HE-fvkew-hm1o_sX8fLvQf94w4qjqdoaMAhg0JjH7eY"
-
 # Setup
 data_path = "../data"
 file_name = "MNL_VA_Handbuch_vaskulaere_Neurologie_221230.pdf"
