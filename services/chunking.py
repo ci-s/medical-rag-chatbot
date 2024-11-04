@@ -12,7 +12,8 @@ from core.ollama import generate_response
 from structures.page import Document, Chunk
 
 
-def chunk_by_size(file_path: str, chunk_size: int, pages: list[int], overlap: int = 0) -> list[Chunk]:
+def chunk_by_size(file_path: str, pages: list[int], chunk_size: int = 512, overlap: int = 0) -> list[Chunk]:
+    print(f"Chunking by size {chunk_size} with overlap {overlap}")
     text_splitter = RecursiveCharacterTextSplitter(chunk_size=chunk_size, chunk_overlap=overlap)
 
     doc = read_pdf(file_path, pages=pages)
@@ -170,6 +171,7 @@ def match_chunks_with_pages(
                 problem_counter += 1
                 break
     print(f"Problems encountered: {problem_counter}")
+    return chunks, problem_counter
 
 
 def chunk_document(
@@ -178,13 +180,20 @@ def chunk_document(
     document = get_document(file_path, pages=pages)
 
     if method == "size":
-        chunks = chunk_by_size(file_path, **kwargs)
+        chunks = chunk_by_size(file_path, pages, **kwargs)
     elif method == "semantic":
-        chunks = chunk_semantic(file_path, **kwargs)
+        chunks = chunk_semantic(file_path, pages, **kwargs)
     elif method == "section":
-        chunks = chunk_by_section(file_path, **kwargs)
+        toc_pages = kwargs.pop("toc_pages", None)
+        if toc_pages is None:
+            ValueError("toc_pages must be provided for section method")
+        chunks = chunk_by_section(file_path, toc_pages, pages, **kwargs)
     else:
         ValueError("Invalid method")
 
     print("Number of chunks created: ", len(chunks))
-    return match_chunks_with_pages(chunks, document, pages)
+
+    chunks, problem_count = match_chunks_with_pages(chunks, document, pages)
+    if problem_count > 0:
+        raise ValueError("Problems encountered during matchinkg chunks with pages")
+    return chunks
