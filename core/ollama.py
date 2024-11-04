@@ -11,6 +11,9 @@ def generate_response(query: str) -> str:
         "prompt": query,
         "stream": stream,
         "parameter": ["temperature", 0],
+        # "options": {"seed": 42},
+        # "format": "json",
+        # "raw": True,
     }  # "raw": True, "seed", 123
     response = requests.post(url, json=data)
 
@@ -18,3 +21,21 @@ def generate_response(query: str) -> str:
     # print("Response token count: ", response.json()["eval_count"])
 
     return response.json()["response"]
+
+
+def generate_response_chat(system_prompt: str, user_prompt: str) -> str:
+    data = {
+        "model": model_name,
+        "stream": stream,
+        "parameter": ["temperature", 0],
+        "options": {"seed": 42},
+        "messages": [{"role": "system", "content": system_prompt}, {"role": "user", "content": user_prompt}],
+        # "format": "json",
+        # "raw": True,
+    }  # "raw": True, "seed", 123
+    response = requests.post(url, json=data)
+
+    # print("Prompt token count: ", response.json()["prompt_eval_count"])
+    # print("Response token count: ", response.json()["eval_count"])
+
+    return response.json()  # ["response"]
