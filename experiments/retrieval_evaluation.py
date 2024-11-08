@@ -20,10 +20,6 @@ file_name = "MNL_VA_Handbuch_vaskulaere_Neurologie_221230.pdf"
 file_path = os.path.join(data_path, file_name)
 pages = list(range(7, 109))
 
-doc = read_pdf(file_path, pages=pages)  # First 6 pages = table of contents etc.
-
-document = get_document(file_path, pages=pages)
-
 method_args = {
     "size": {"chunk_size": 512},
     "section": {"toc_pages": [2, 3]},

@@ -1,5 +1,6 @@
 from pypdf import PdfReader
 import re
+import pandas as pd
 
 from structures.page import Document, Page
 
@@ -24,10 +25,24 @@ REMOVE_LIST = [
 ]
 
 
-def preprocess_content(content: str) -> str:
+abbreviations = pd.read_csv("../data/Abbreviations - Revised_by_clinicians.csv")
+abbreviation_dict = dict(zip(abbreviations["Abbreviation"], abbreviations["Meaning"]))
+
+
+def replace_abbreviations(text, abbreviation_dict):
+    pattern = re.compile(r"\b(" + "|".join(re.escape(abbr) for abbr in abbreviation_dict.keys()) + r")\b")
+
+    return pattern.sub(lambda x: abbreviation_dict[x.group()], text)
+
+
+def preprocess_content(content: str, replace_abbreviations: bool = False) -> str:
     for pattern in REMOVE_LIST:
         content = re.sub(pattern, " ", content)
-    return content
+
+    if replace_abbreviations:
+        return replace_abbreviations(content, abbreviation_dict)
+    else:
+        return content
 
 
 def remove_string(content: str, string: str, case_sensitive=True) -> str:
@@ -81,7 +96,7 @@ def get_document(file_path, pages: list[int] = []) -> Document:
         raw_page_content = page.extract_text()
 
         if i + 1 == 24:  # TODO: Temprorary fix for duplicate heading 4.3
-            raw_page_content.replace("4.3 Blutdrucktherapie", "")
+            raw_page_content = raw_page_content.replace("4.3 Blutdrucktherapie", "")
 
         page_content = preprocess_content(raw_page_content)
         doc.add_page(
