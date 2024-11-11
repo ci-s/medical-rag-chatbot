@@ -5,11 +5,8 @@ import os
 project_root = os.path.abspath(os.path.join(os.getcwd(), ".."))
 sys.path.append(project_root)
 
-from core.pdf_utils import read_pdf
 from core.embedding import embed_chunks
 from services.retrieval import FaissService
-from services.splitter import TextSplitter
-from core.pdf_utils import get_document
 from services.chunking import chunk_document
 from eval.retrieval import evaluate_source
 

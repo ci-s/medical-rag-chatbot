@@ -8,7 +8,7 @@ import pandas as pd
 project_root = os.path.abspath(os.path.join(os.getcwd(), ".."))
 sys.path.append(project_root)
 
-from core.pdf_utils import read_pdf
+from core.document import read_pdf
 from core.ollama import generate_response
 
 data_path = "../data"

@@ -1,3 +1,6 @@
+import pickle
+
+
 class Page:
     def __init__(self, page_number: int, token_count: int, raw_content: str, processed_content: str):
         self.page_number = page_number
@@ -7,17 +10,38 @@ class Page:
 
 
 class Document:
-    def __init__(self, path: str, pages: list[Page] = []):
+    def __init__(self, path: str):
         self.path = path
-        self.pages = pages
+        self.pages = []
 
     def add_page(self, page):
         self.pages.append(page)
 
     def get_page(self, page_number):
-        return next(
-            (page for page in self.pages if page.page_number == page_number), None
-        )  # TODO: does it work as intended?
+        for page in self.pages:
+            if page.page_number == page_number:
+                return page
+        return None
+
+    def get_raw_content(self, page_number):
+        page = self.get_page(page_number)
+        return page.raw_content if page else None
+
+    def get_processed_content(self, page_number):
+        page = self.get_page(page_number)
+        return page.processed_content if page else None
+
+    def save(self, filepath):
+        with open(filepath, "wb") as file:
+            pickle.dump(self, file)
+        print(f"Document saved to {filepath}")
+
+    @staticmethod
+    def load(filepath):
+        with open(filepath, "rb") as file:
+            document = pickle.load(file)
+        print(f"Document loaded from {filepath}")
+        return document
 
 
 class Chunk:
