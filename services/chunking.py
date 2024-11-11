@@ -7,7 +7,7 @@ from langchain_experimental.text_splitter import SemanticChunker
 from langchain_nomic import NomicEmbeddings
 
 from thefuzz import fuzz
-from core.pdf_utils import read_pdf, get_document
+from core.document import read_pdf, get_document
 from core.ollama import generate_response
 from structures.page import Document, Chunk
 
@@ -177,7 +177,7 @@ def match_chunks_with_pages(
 def chunk_document(
     method: Literal["size", "semantic", "section"], file_path: str, pages: list[int], **kwargs
 ) -> list[Chunk]:
-    document = get_document(file_path, pages=pages)
+    document = get_document(file_path, pages=pages)  # remove so that this file can reside within core?
 
     if method == "size":
         chunks = chunk_by_size(file_path, pages, **kwargs)
