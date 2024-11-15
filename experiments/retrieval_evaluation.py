@@ -27,10 +27,8 @@ for method, args in method_args.items():
     print(f"Method: {method}")
     chunks = chunk_document(method=method, file_path=file_path, pages=pages, **args)
 
-    embeddings = embed_chunks([chunk.text for chunk in chunks], task_type="search_document")
-
     faiss_service = FaissService()
-    faiss_service.create_index(embeddings)
+    faiss_service.create_index(chunks)
 
     stats = evaluate_source("Handbuch", chunks, faiss_service, top_k=3)
     print(stats)
