@@ -29,12 +29,10 @@ def chunk_semantic(document: Document, pages: list[int]) -> list[Chunk]:
     return [Chunk(chunk, None, None) for chunk in chunks]
 
 
-def get_headings(document: Document, pages: list[int]) -> list[str]:
+def get_headings(document: Document) -> list[str]:
     headings = []
 
-    selected_pages = [document.get_page(page) for page in pages]
-
-    for page in selected_pages:
+    for page in document.pages:
         prompt = """
             Read the PDF page containing table of content below and provide the list of headings in JSON format as follows:
             [
@@ -95,10 +93,10 @@ def postprocess_sections(sections: dict[str, str]) -> dict[str, str]:
 
 def chunk_by_section(
     document: Document,
-    toc_pages: list[int],
+    toc: Document,
     pages: list[int],
 ) -> list[Chunk]:
-    headings = get_headings(document, pages=toc_pages)
+    headings = get_headings(toc)
     print("Extracted headings:\n")
     for heading in headings:
         print("\n" + heading)
