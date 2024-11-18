@@ -5,45 +5,38 @@ from core.embedding import embed_chunks
 
 
 class FaissService:
-    def __init__(self, encoder_model=None):
-        if encoder_model is not None:
-            self.encoder_model = encoder_model
-        else:
-            self.encoder_model = None
+    def __init__(self):
         self.index = None
+        self.chunks = None
 
-    def _encode_sentences(self, sentences):
-        return self.encoder_model.encode(sentences, normalize_embeddings=True)
-
-    def create_index(self, text: list[Any]):
-        if text is None:
+    def create_index(self, chunks: list[str]):
+        if chunks is None:
             raise ValueError("Image representations cannot be None")
-        if isinstance(text, list) and isinstance(text[0], str):
-            embeddings = self._encode_sentences(text)
-        else:
-            embeddings = text
+
+        embeddings = embed_chunks([chunk.text for chunk in chunks], task_type="search_document")
+
         d = embeddings.shape[1]
         index = faiss.IndexFlatIP(d)  # TODO: parametrize
         index.add(embeddings)
         print("Index created with {} chunks".format(index.ntotal))
         self.index = index
+        self.chunks = chunks
 
     def search_index(self, query, k):
         if isinstance(query, str):
-            query_embedding = self._encode_sentences([query])
+            query_embedding = self._encode_chunks([query])
         else:
             query_embedding = query
 
         D, I = self.index.search(query_embedding, k)
-        return D[0], I[0]
+
+        return D[0], [self.chunks[idx] for idx in I[0]]
 
 
-def retrieve(chunks: list[str], query: str, faiss_service: FaissService, top_k: int = 3):
+def retrieve(query: str, faiss_service: FaissService, top_k: int = 3):
     query_embedding = embed_chunks(query, task_type="search_query")
 
-    similarity, i = faiss_service.search_index(query_embedding, top_k)
-
-    retrieved_documents = [chunks[idx] for idx in i]
+    similarity, retrieved_documents = faiss_service.search_index(query_embedding, top_k)
 
     print("Retrieved documents:")
     for i, retrieved_document in enumerate(retrieved_documents):

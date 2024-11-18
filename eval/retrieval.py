@@ -59,7 +59,7 @@ def evaluate_source(
     chunks: list[Chunk],
     faiss_service: FaissService,
     top_k: int = 3,
-) -> list[Stats]:
+) -> int:
     all_stats = []
 
     for vignette in vignette_yaml["vignettes"]:
