@@ -113,34 +113,6 @@ def remove_string(content: str, string: str, case_sensitive=True) -> str:
     return re.sub(pattern, " ", content)
 
 
-# Rewrite using get_document
-def read_pdf(file_path, pages: list[int] = []) -> str:
-    """
-    Reads the content of a PDF file, excluding specified pages.
-
-    Args:
-        file_path (str): The path to the PDF file.
-        exclude_pages (list[int], optional): The list of page numbers to include. Defaults to [] and reads all pages.
-
-    Returns:
-        str: The extracted content from the PDF file.
-    """
-    reader = PdfReader(file_path)
-    doc = ""
-    for i, page in enumerate(reader.pages):
-        if pages and i + 1 not in pages:
-            continue
-        page_content = page.extract_text()
-
-        page_content = preprocess_content(page_content)
-
-        doc = doc + "\f" + page_content
-
-    return doc.replace(
-        "4.3 Blutdrucktherapie\nBei hypotonen", "\nBei hypotonen"
-    )  # TODO: Temprorary fix for duplicate heading 4.3
-
-
 def load_document(file_path, pages: list[int] = []) -> Document:
     """
     TODO: Add docstring

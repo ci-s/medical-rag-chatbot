@@ -8,23 +8,28 @@ import pandas as pd
 project_root = os.path.abspath(os.path.join(os.getcwd(), ".."))
 sys.path.append(project_root)
 
-from core.document import read_pdf
 from core.ollama import generate_response
+from core.document import get_document
+from structures.page import Document
 
 data_path = "../data"
 file_name = "MNL_VA_Handbuch_vaskulaere_Neurologie_221230.pdf"
 
 file_path = os.path.join(data_path, file_name)
-doc = read_pdf(file_path, pages=list(range(7, 109)))  # First 6 pages = table of contents etc.
+pages = list(range(1, 109))
+document = get_document(file_path, pages=pages)
 
 
-def get_abbreviations_from_pages(pages: list[int]) -> list:
+# refactored and not tested, use with caution
+def get_abbreviations_from_pages(document: Document, pages: list[int]) -> list:
     abbreviations = []
     pages_with_errors = []
 
-    for page in pages:
+    for page in document.pages:
+        if page.page_number not in pages:
+            continue
         print("Processing page ", str(page))
-        content = read_pdf(file_path, pages=[page])
+        content = page.processed_content
         prompt = """
             Read the PDF page and provide the list of abbreviations and their meanings in JSON format as follows:
             [
@@ -48,14 +53,13 @@ def get_abbreviations_from_pages(pages: list[int]) -> list:
                 abbreviations.append((d["abbreviation"], d["meaning"]))
         except:
             print("PROBLEM WITH PAGE")
-            pages_with_errors.append(page)
+            pages_with_errors.append(page.page_number)
 
         print("Length of abbreviations: ", len(abbreviations))
 
     return abbreviations, pages_with_errors
 
 
-pages = list(range(1, 109))
 abbreviations, pages_with_errors = get_abbreviations_from_pages(pages)
 print("Number of pages with errors: ", len(pages_with_errors))
 

@@ -1,4 +1,5 @@
 import re
+from structures.page import Document
 
 
 def levenshteinDistance(s1, s2):
@@ -19,3 +20,16 @@ def levenshteinDistance(s1, s2):
 
 def normalize_text(text):
     return re.sub(r"[^a-zA-Z0-9]", "", text)
+
+
+def merge_document(document: Document, pages: list[int], raw: bool = False) -> str:
+    doc = ""
+    for page in document.pages:
+        if page.page_number not in pages:
+            continue
+        if raw:
+            doc = doc + "\f" + page.raw_content
+        else:
+            doc = doc + "\f" + page.processed_content
+
+    return doc
