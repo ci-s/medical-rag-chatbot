@@ -7,7 +7,7 @@ sys.path.append(project_root)
 
 from core.embedding import embed_chunks
 from services.retrieval import FaissService
-from services.chunking import chunk_document
+from core.chunking import chunk_document
 from eval.retrieval import evaluate_source
 
 # Setup
