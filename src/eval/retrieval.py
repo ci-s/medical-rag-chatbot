@@ -2,15 +2,10 @@ import yaml
 from statistics import mean
 from typing import Literal
 
-from structures.page import Chunk
+from domain.document import Chunk
+from domain.evaluation import Stats
 from core.embedding import embed_chunks
 from services.retrieval import FaissService
-
-
-class Stats:
-    def __init__(self, pct: float, total: int):
-        self.pct = pct
-        self.total = total
 
 
 ypath = "../data/fallvignetten_revised.yaml"  # TODO: move to config

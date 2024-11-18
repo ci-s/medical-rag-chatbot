@@ -1,5 +1,5 @@
 import re
-from structures.page import Document
+from domain.document import Document
 
 
 def levenshteinDistance(s1, s2):

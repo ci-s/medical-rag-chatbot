@@ -3,7 +3,7 @@ import re
 import pandas as pd
 from langchain_core.output_parsers import JsonOutputParser
 from langchain_ollama import ChatOllama
-from structures.page import Document, Page
+from domain.document import Document, Page
 from core.utils import levenshteinDistance, normalize_text
 
 header_pattern = r"Klinik\sund\sPoliklinik\sfür\sNeurologie"

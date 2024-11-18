@@ -13,6 +13,7 @@ from langchain_core.output_parsers import JsonOutputParser
 
 from services.retrieval import FaissService, retrieve
 from core.ollama import generate_response
+from domain.evaluation import Feedback
 from settings.settings import settings
 
 ypath = settings.vignettes_path
@@ -68,15 +69,6 @@ evaluation_prompt_template = ChatPromptTemplate.from_messages(
         HumanMessagePromptTemplate.from_template(EVALUATION_PROMPT),
     ]
 )
-
-
-class Feedback:
-    def __init__(self, feedback: str, score: int):
-        self.text = feedback
-        self.score = score
-
-    def __repr__(self):
-        return f"Feedback(feedback={self.text}, score={self.score})"
 
 
 def evaluate_single(vignette_id: int, question: str, faiss_service: FaissService, top_k: int = 3) -> Feedback:

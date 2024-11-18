@@ -9,7 +9,7 @@ from langchain_nomic import NomicEmbeddings
 from thefuzz import fuzz
 from core.ollama import generate_response
 from core.utils import merge_document
-from structures.page import Document, Chunk
+from domain.document import Document, Chunk
 
 
 def chunk_by_size(document: Document, pages: list[int], chunk_size: int = 512, overlap: int = 0) -> list[Chunk]:

@@ -10,7 +10,7 @@ sys.path.append(project_root)
 
 from core.ollama import generate_response
 from core.document import get_document
-from structures.page import Document
+from domain.document import Document
 
 data_path = "../data"
 file_name = "MNL_VA_Handbuch_vaskulaere_Neurologie_221230.pdf"
