@@ -3,8 +3,8 @@ import re
 import time
 from typing import Literal
 from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain_experimental.text_splitter import SemanticChunker
-from langchain_nomic import NomicEmbeddings
+# from langchain_experimental.text_splitter import SemanticChunker
+# from langchain_nomic import NomicEmbeddings
 
 from thefuzz import fuzz
 from core.pdf_utils import read_pdf, get_document
@@ -12,21 +12,20 @@ from core.ollama import generate_response
 from structures.page import Document, Chunk
 
 
-def chunk_by_size(file_path: str, pages: list[int], chunk_size: int = 512, overlap: int = 0) -> list[Chunk]:
+def chunk_by_size(doc: str, pages: list[int], chunk_size: int = 512, overlap: int = 0) -> list[Chunk]:
     print(f"Chunking by size {chunk_size} with overlap {overlap}")
     text_splitter = RecursiveCharacterTextSplitter(chunk_size=chunk_size, chunk_overlap=overlap)
 
-    doc = read_pdf(file_path, pages=pages)
     docs = text_splitter.create_documents([doc])
 
     return [Chunk(document.page_content, None, None) for document in docs]
 
 
-def chunk_semantic(file_path: str, pages: list[int]) -> list[Chunk]:
-    doc = read_pdf(file_path, pages=pages)
-    text_splitter = SemanticChunker(NomicEmbeddings(model="nomic-embed-text-v1.5"))
-    chunks = text_splitter.split_text(doc)  # or create_documents using my get_document
-    return [Chunk(chunk, None, None) for chunk in chunks]
+# def chunk_semantic(file_path: str, pages: list[int]) -> list[Chunk]:
+#     doc = read_pdf(file_path, pages=pages)
+#     text_splitter = SemanticChunker(NomicEmbeddings(model="nomic-embed-text-v1.5"))
+#     chunks = text_splitter.split_text(doc)  # or create_documents using my get_document
+#     return [Chunk(chunk, None, None) for chunk in chunks]
 
 
 def get_headings(file_path: str, pages: list[int]) -> list[str]:
@@ -179,10 +178,13 @@ def chunk_document(
 ) -> list[Chunk]:
     document = get_document(file_path, pages=pages)
 
+    #document_concat = get_concat_document(document, pages) # TODO
+    
     if method == "size":
         chunks = chunk_by_size(file_path, pages, **kwargs)
     elif method == "semantic":
-        chunks = chunk_semantic(file_path, pages, **kwargs)
+        # chunks = chunk_semantic(file_path, pages, **kwargs)
+        pass
     elif method == "section":
         toc_pages = kwargs.pop("toc_pages", None)
         if toc_pages is None:

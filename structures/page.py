@@ -7,9 +7,9 @@ class Page:
 
 
 class Document:
-    def __init__(self, path: str, pages: list[Page] = []):
+    def __init__(self, path: str, pages: list[Page] = None):
         self.path = path
-        self.pages = pages
+        self.pages = pages if pages is not None else []
 
     def add_page(self, page):
         self.pages.append(page)
