@@ -3,8 +3,9 @@ import re
 import pandas as pd
 from langchain_core.output_parsers import JsonOutputParser
 from langchain_ollama import ChatOllama
-from structures.page import Document, Page
+from domain.document import Document, Page
 from core.utils import levenshteinDistance, normalize_text
+from settings.settings import settings
 
 header_pattern = r"Klinik\sund\sPoliklinik\sfür\sNeurologie"
 footer_pattern_page = r"Seite\s\d+\svon\s\d+"
@@ -27,7 +28,7 @@ REMOVE_LIST = [
 ]
 
 
-abbreviations = pd.read_csv("../data/Abbreviations - Revised_by_clinicians.csv")
+abbreviations = pd.read_csv(settings.abbreviations_csv_path)
 abbreviation_dict = dict(zip(abbreviations["Abbreviation"], abbreviations["Meaning"]))
 
 llm = ChatOllama(model="llama3.1:8b-instruct-q4_0", temperature=0, format="json")
