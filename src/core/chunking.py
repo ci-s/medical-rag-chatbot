@@ -10,6 +10,7 @@ from thefuzz import fuzz
 from core.ollama import generate_response
 from core.utils import merge_document
 from domain.document import Document, Chunk
+from prompts import HEADINGS_PROMPT
 
 
 def chunk_by_size(document: Document, pages: list[int], chunk_size: int = 512, overlap: int = 0) -> list[Chunk]:
@@ -33,31 +34,8 @@ def get_headings(document: Document) -> list[str]:
     headings = []
 
     for page in document.pages:
-        prompt = """
-            Read the PDF page containing table of content below and provide the list of headings in JSON format as follows:
-            [
-            {
-                "number": "4",
-                "heading": "Allgemeine Behandlungsmaßnahmen / Basistherapie"
-            },
-            {
-                "number": "4.1",
-                "heading": "Oxygenierung"
-            }
-            ]
-
-            for a content as follows:
-                "Inhalt
-                4. Allgemeine Behandlungsmaßnahmen / Basistherapie ………………………………………....
-                4.1 Oxygenierung ….............................
-                88
-                92"
-
-            Please ensure the list starts from the very first heading in the content and continues up to the third level of subheadings. Only include headings from the table of contents, excluding "Inhalt." Do not include subheadings beyond the third level (e.g., no 4.1.1.2). Do not say anything else and don't use markdown. Make sure the response is a valid JSON.\n
-
-        """
         # TODO: Add error handling for invalid JSON format
-        response = generate_response(prompt + page.processed_content)
+        response = generate_response(HEADINGS_PROMPT + page.processed_content)
         # print(response)
         # print("______________________")
         heading_dict_list = json.loads(response)
