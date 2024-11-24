@@ -14,6 +14,10 @@ class Settings(BaseSettings):
     file_name: str
 
     vignettes_path: Path
+    
+    llm_path: Path
+    inference_type: str
+    inference_location: str
 
 
 load_dotenv()

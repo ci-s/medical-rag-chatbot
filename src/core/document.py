@@ -1,11 +1,11 @@
 from pypdf import PdfReader
 import re
-import pandas as pd
-from langchain_core.output_parsers import JsonOutputParser
-from langchain_ollama import ChatOllama
+
 from domain.document import Document, Page
 from core.utils import levenshteinDistance, normalize_text
 from settings.settings import settings
+from settings import ABBREVIATION_DICT
+from core.model import generate_response
 
 header_pattern = r"Klinik\sund\sPoliklinik\sfür\sNeurologie"
 footer_pattern_page = r"Seite\s\d+\svon\s\d+"
@@ -26,13 +26,6 @@ REMOVE_LIST = [
     alt2_header_pattern,
     page_pattern,
 ]
-
-
-abbreviations = pd.read_csv(settings.abbreviations_csv_path)
-abbreviation_dict = dict(zip(abbreviations["Abbreviation"], abbreviations["Meaning"]))
-
-llm = ChatOllama(model="llama3.1:8b-instruct-q4_0", temperature=0, format="json")
-chain = llm | JsonOutputParser()  # TODO: move to init
 
 
 def replace_abbreviations(text: str, abbreviation_dict: dict) -> str:
@@ -73,7 +66,7 @@ def inject_whitespace_w_llm(text: str):
         ("human", text),
     ]
 
-    return chain.invoke(messages)["output"]
+    return generate_response(messages)
 
 
 def inject_whitespace(content: str, num_changes_threshold: int = 20) -> str:
@@ -100,7 +93,7 @@ def preprocess_content(content: str, whitespace_injection: bool = False, is_repl
         content = inject_whitespace(content)
 
     if is_replace_abbreviations:
-        return replace_abbreviations(content, abbreviation_dict)
+        return replace_abbreviations(content, ABBREVIATION_DICT)
     else:
         return content
 
