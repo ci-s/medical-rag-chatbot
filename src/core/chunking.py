@@ -7,7 +7,7 @@ from langchain_experimental.text_splitter import SemanticChunker
 from langchain_nomic import NomicEmbeddings
 
 from thefuzz import fuzz
-from core.ollama import generate_response
+from core.model import generate_response
 from core.utils import merge_document
 from domain.document import Document, Chunk
 from prompts import HEADINGS_PROMPT
