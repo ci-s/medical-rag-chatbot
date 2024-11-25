@@ -30,19 +30,45 @@ def chunk_semantic(document: Document, pages: list[int]) -> list[Chunk]:
     return [Chunk(chunk, None, None) for chunk in chunks]
 
 
+def convert_output_to_json(output: str):
+    """
+    Process the LLM output string to extract and return a JSON dictionary.
+
+    Args:
+        output (str): The raw output from the LLM.
+
+    Returns:
+        dict: The parsed JSON dictionary.
+    """
+    try:
+        # Clean up the string to remove unnecessary newlines and leading/trailing whitespace
+        cleaned_output = output.strip()
+
+        # Remove outer quotes if the entire content is wrapped in quotes
+        if cleaned_output.startswith('"') and cleaned_output.endswith('"'):
+            cleaned_output = cleaned_output[1:-1]
+
+        # Decode any escaped characters
+        decoded_output = cleaned_output.encode("utf-8").decode("unicode_escape")
+
+        # Handle any potential extra newlines introduced
+        normalized_output = decoded_output.replace("\n", "")
+
+        # Convert the string into JSON
+        json_dict = json.loads(normalized_output)
+
+        return json_dict
+    except json.JSONDecodeError as e:
+        raise ValueError(f"Failed to parse JSON: {e}")
+
+
 def get_headings(document: Document) -> list[str]:
     headings = []
 
     for page in document.pages:
-        # TODO: Add error handling for invalid JSON format
         response = generate_response(HEADINGS_PROMPT + page.processed_content)
-        # print(response)
-        # print("______________________")
-        heading_dict_list = json.loads(response)
+        heading_dict_list = convert_output_to_json(response)
         headings.extend([d["number"] + ". " + d["heading"] for d in heading_dict_list])
-
-        # Only include the headings that are within the table of contents (i.e. NOT "Inhalt") and only the headings and subheadings up to the second level i.e. 4.1. Don't include subheadings BEYOND the second level i.e. 4.1.1.
-        # Do not say anything else and don't use markdown. Make sure the response is a valid JSON.\n
 
     return headings
 
