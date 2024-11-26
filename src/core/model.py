@@ -14,7 +14,7 @@ class PromptFormat_llama3:
         pass
 
     def default_system_prompt(self):
-        return """Assist users with tasks and answer questions to the best of your knowledge. Provide helpful and informative responses. ALWAYS generate a valid JSON as a response. """
+        return """Assist users with tasks and answer questions to the best of your knowledge. Provide helpful and informative responses.Make sure to return a valid JSON."""
 
     def first_prompt(self):
         return (
@@ -86,5 +86,12 @@ def generate_response(prompt: str) -> str:
         formatted_prompt = format_prompt(prompt_format, prompt, first=True)
         data = {"prompt": formatted_prompt, "max_new_tokens": MAX_NEW_TOKENS}
         response = requests.post(url, headers=headers, data=json.dumps(data))
-
-        return response.text  # .json()["response"]
+        try:
+            parsed_response = response.json()  # Automatically parses JSON
+            # Check if the parsed response contains another JSON-encoded string
+            if isinstance(parsed_response, str):
+                return json.loads(parsed_response)  # Parse inner JSON
+            return parsed_response
+        except json.JSONDecodeError:
+            # If the response isn't valid JSON, return raw text
+            return response.text
