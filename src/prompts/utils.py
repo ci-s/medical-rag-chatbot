@@ -1,4 +1,4 @@
-from question import QUESTION_PROMPT
+from .question import QUESTION_PROMPT
 
 
 def create_question_prompt(retrieved_documents, background, query):

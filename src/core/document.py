@@ -3,7 +3,6 @@ import re
 
 from domain.document import Document, Page
 from core.utils import levenshteinDistance, normalize_text
-from settings.settings import settings
 from settings import ABBREVIATION_DICT
 from core.model import generate_response
 
