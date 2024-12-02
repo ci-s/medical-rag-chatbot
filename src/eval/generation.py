@@ -5,12 +5,13 @@ import json
 from services.retrieval import FaissService, retrieve
 from core.model import generate_response
 from domain.evaluation import Feedback
-from settings import VIGNETTE_YAML
+from settings import VIGNETTE_COLLECTION
 from prompts import GENERATION_EVALUATION_PROMPT, create_question_prompt
 
 
 def evaluate_single(vignette_id: int, question: str, faiss_service: FaissService, top_k: int = 3) -> Feedback:
-    questions = VIGNETTE_YAML["vignettes"][vignette_id].get("questions", None)
+    vignette = VIGNETTE_COLLECTION.get_vignette_by_id(vignette_id)
+    questions = vignette.get_questions()
 
     if questions is None:
         print(f"Vignette with id {vignette_id} not found")
@@ -19,9 +20,9 @@ def evaluate_single(vignette_id: int, question: str, faiss_service: FaissService
     background = None
     answer = None
     for question_obj in questions:
-        if question == question_obj["question"]:
-            background = VIGNETTE_YAML["vignettes"][vignette_id]["background"]
-            answer = question_obj["answer"]
+        if question == question_obj.question:
+            background = vignette.get_background()
+            answer = question_obj.get_answer()
 
     if background is None or answer is None:
         print(f"Question not found in vignette {vignette_id}")
@@ -56,12 +57,12 @@ def evaluate_source(
 ) -> int:
     all_feedbacks = []
 
-    for vignette in VIGNETTE_YAML["vignettes"]:
-        for question in vignette["questions"]:
-            if question["source"] != source:
+    for vignette in VIGNETTE_COLLECTION.get_vignettes():
+        for question in vignette.get_questions():
+            if question.get_source() != source:
                 continue
 
-            all_feedbacks.append(evaluate_single(vignette["id"], question["question"], faiss_service, top_k))
+            all_feedbacks.append(evaluate_single(vignette.get_id(), question.get_question(), faiss_service, top_k))
 
     print(f"Questions from {source}: {len([all_feedbacks for s in all_feedbacks if s is not None])}")
 
