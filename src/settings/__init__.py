@@ -1,7 +1,7 @@
 import pandas as pd
-import yaml
 
 from settings.settings import settings
+from domain.vignette import VignetteCollection
 
 
 def setup_model():
@@ -47,5 +47,5 @@ elif settings.inference_location == "remote":
 
 ABBREVIATION_DICT = get_abbreviation_dict()
 
-with open(settings.vignettes_path, "r") as file:
-    VIGNETTE_YAML = yaml.safe_load(file)
+VIGNETTE_COLLECTION = VignetteCollection()
+VIGNETTE_COLLECTION.load_from_yaml(settings.vignettes_path)
