@@ -4,26 +4,21 @@ from typing import Literal
 
 from domain.document import Chunk
 from domain.evaluation import Stats
-from core.embedding import embed_chunks
-from services.retrieval import FaissService
+from services.retrieval import FaissService, retrieve
 
-
-ypath = "../data/fallvignetten_revised.yaml"  # TODO: move to config
-
-with open(ypath, "r") as file:
-    vignette_yaml = yaml.safe_load(file)
+from settings import VIGNETTE_COLLECTION
 
 
 def get_references_w_id(vignette_id, question_id) -> list[int]:
-    return vignette_yaml["vignettes"][vignette_id]["questions"][question_id]["reference"]
+    return VIGNETTE_COLLECTION.get_vignette_by_id(vignette_id).get_question(question_id).get_reference()
 
 
 def get_references(query: str) -> list[int]:
     # Assuming there are no duplicate questions
-    for vignette in vignette_yaml["vignettes"]:
-        for question in vignette["questions"]:
-            if query == question["question"]:
-                return question["reference"]
+    for vignette in VIGNETTE_COLLECTION.vignettes:
+        for question in vignette.get_questions():
+            if query == question.get_question():
+                return question.get_reference()
 
 
 def evaluate_single(query: str, retrieved_passages: list[Chunk]) -> Stats | None:
@@ -54,19 +49,23 @@ def evaluate_source(
     chunks: list[Chunk],
     faiss_service: FaissService,
     top_k: int = 3,
+    text_only: bool = False,
 ) -> int:
     all_stats = []
 
-    for vignette in vignette_yaml["vignettes"]:
-        for question in vignette["questions"]:
-            if question["source"] != source:
+    for vignette in VIGNETTE_COLLECTION.get_vignettes():
+        for question in vignette.get_questions():
+            if question.get_source() != source:
                 continue
-            query_embedding = embed_chunks(question["question"], task_type="search_query")
 
-            similarity, i = faiss_service.search_index(query_embedding, top_k)
-            retrieved_documents = [chunks[idx] for idx in i]
-
-            all_stats.append(evaluate_single(question["question"], retrieved_documents))
+            if text_only and question.text_only:
+                retrieved_documents = retrieve(question.question, faiss_service, top_k=top_k)
+                all_stats.append(evaluate_single(question.get_question(), retrieved_documents))
+            elif not text_only:
+                retrieved_documents = retrieve(question.question, faiss_service, top_k=top_k)
+                all_stats.append(evaluate_single(question.get_question(), retrieved_documents))
+            else:
+                pass
 
     print(f"Questions from {source}: {len([all_stats for s in all_stats if s is not None])}")
 
