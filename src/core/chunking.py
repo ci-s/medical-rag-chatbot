@@ -125,19 +125,17 @@ def match_chunks_with_pages(
     """
     problem_counter = 0
 
-    start_pointer = pages[0]
+    start_pointer = 0  # index
     current_pointer = start_pointer
 
     for n, chunk in enumerate(chunks):
-        print("*" * 50)
-        print(f"Processing chunk {n}")
         matched = False
         start = time.time()
 
         while not matched:
             interest_part = " ".join(
-                document.get_page(i).processed_content for i in range(start_pointer, current_pointer + 1)
-            )  # processed or raw content?
+                document.get_page(pages[i]).processed_content for i in range(start_pointer, current_pointer + 1)
+            )
 
             if len(interest_part) < len(chunk.text):
                 current_pointer += 1
@@ -145,13 +143,12 @@ def match_chunks_with_pages(
 
             rat = fuzz.partial_ratio(chunk.text, interest_part)
 
-            print(f"Partial ratio similarity score: {rat}")
             if rat > similarity_threshold:
                 matched = True
-                chunk.start_page = start_pointer
-                chunk.end_page = current_pointer
+                chunk.start_page = pages[start_pointer]
+                chunk.end_page = pages[current_pointer]
 
-                trailing_part = document.get_page(current_pointer).processed_content[-300:]
+                trailing_part = document.get_page(pages[current_pointer]).processed_content[-300:]
                 if overlap and fuzz.partial_ratio(trailing_part, chunk.text) > similarity_threshold:
                     start_pointer = current_pointer + 1
                 else:
@@ -159,7 +156,7 @@ def match_chunks_with_pages(
             else:
                 current_pointer += 1
 
-            if current_pointer > pages[-1]:
+            if current_pointer >= len(pages):
                 print("Chunk not found in document")
                 problem_counter += 1
                 break
@@ -173,7 +170,7 @@ def match_chunks_with_pages(
                 print("Timeout")
                 problem_counter += 1
                 break
-    print(f"Problems encountered: {problem_counter}")
+    print(f"Problems encountered while matching chunks with pages: {problem_counter}")
     return chunks, problem_counter
 
 

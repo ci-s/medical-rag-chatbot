@@ -10,12 +10,14 @@ class Question:
         answer: str,
         reference: list[int],
         source: Literal["Handbuch", "Antibiotika"],
+        text_only: bool = False,
     ) -> None:
         self.id = id
         self.question = question
         self.answer = answer
         self.reference = reference
         self.source = source
+        self.text_only = text_only
 
     def get_id(self) -> int:
         return self.id
@@ -86,8 +88,14 @@ class VignetteCollection:
     def get_vignettes(self) -> list[Vignette]:
         return self.vignettes
 
-    def get_vignette_by_id(self, id):
+    def get_vignette_by_id(self, id) -> Vignette | None:
         for vignette in self.vignettes:
             if vignette.id == id:
                 return vignette
         return None
+
+    def label_text_only_questions(self, text_pages) -> None:
+        for vignette in self.vignettes:
+            for question in vignette.get_questions():
+                if all(p in text_pages for p in question.reference):
+                    question.text_only = True

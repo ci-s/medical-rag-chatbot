@@ -54,6 +54,7 @@ def evaluate_source(
     source: Literal["Handbuch", "Antibiotika"],
     faiss_service: FaissService,
     top_k: int = 3,
+    text_only: bool = False,
 ) -> int:
     all_feedbacks = []
 
@@ -61,8 +62,12 @@ def evaluate_source(
         for question in vignette.get_questions():
             if question.get_source() != source:
                 continue
-
-            all_feedbacks.append(evaluate_single(vignette.get_id(), question.get_question(), faiss_service, top_k))
+            if text_only and question.text_only:
+                all_feedbacks.append(evaluate_single(vignette.get_id(), question.get_question(), faiss_service, top_k))
+            elif not text_only:
+                all_feedbacks.append(evaluate_single(vignette.get_id(), question.get_question(), faiss_service, top_k))
+            else:
+                pass
 
     print(f"Questions from {source}: {len([all_feedbacks for s in all_feedbacks if s is not None])}")
 
