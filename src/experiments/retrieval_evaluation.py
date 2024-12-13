@@ -31,11 +31,7 @@ for method, args in method_args.items():
     faiss_service = FaissService()
     faiss_service.create_index(chunks)
 
+
     stats = evaluate_source("Handbuch", faiss_service, top_k=3, text_only=True, include_context=False)
     print(stats)
-
-# Questions from Handbuch: 69
-# 0.2391304347826087
-
-# Questions from Handbuch: 18
-# 0.7777
+    

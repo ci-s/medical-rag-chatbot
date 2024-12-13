@@ -115,6 +115,7 @@ class VignetteCollection:
 
     def label_text_only_questions(self, text_pages) -> None:
         id_list = []  # TODO: decide should it stay here or not
+
         for vignette in self.vignettes:
             for question in vignette.get_questions():
                 if all(p in text_pages for p in question.reference):
