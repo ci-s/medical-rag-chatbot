@@ -1,9 +1,9 @@
 from pypdf import PdfReader
 import re
+import time
 
 from domain.document import Document, Page
-from core.utils import levenshteinDistance, normalize_text
-from settings import ABBREVIATION_DICT
+from core.utils import levenshteinDistance, normalize_text, replace_abbreviations
 from core.model import generate_response
 
 header_pattern = r"Klinik\sund\sPoliklinik\sfür\sNeurologie"
@@ -27,26 +27,6 @@ REMOVE_LIST = [
 ]
 
 
-def replace_abbreviations(text: str, abbreviation_dict: dict) -> str:
-    global REPLACED_ABB_COUNT
-
-    pattern = re.compile(r"\b(" + "|".join(re.escape(abbr) for abbr in abbreviation_dict.keys()) + r")\b")
-
-    count = 0
-
-    def replacer(match):
-        nonlocal count
-        count += 1
-        return abbreviation_dict[match.group()]
-
-    result_text = pattern.sub(replacer, text)
-
-    print(f"Number of abbreviations replaced: {count}")
-    REPLACED_ABB_COUNT += count
-    print(f"Number of abbreviations replaced total: {count}")
-    return result_text
-
-
 def has_significant_changes(original, modified, threshold=20):
     normalized_original = normalize_text(original)
     normalized_modified = normalize_text(modified)
@@ -57,19 +37,19 @@ def has_significant_changes(original, modified, threshold=20):
 
 
 def inject_whitespace_w_llm(text: str):
-    messages = [
-        (
-            "system",
-            """I have a block of text where some words are concatenated due to errors in PDF extraction. Your task is to identify where spaces are missing between words and add them where necessary. Please only adjust spacing—do not modify punctuation, capitalization, or any part of the text otherwise. Return the modified text with spaces added where needed in a json format as follows: {"output": "modified text here"} Say nothing else and don't change anything else. Be specifically careful about not modifying headings and subheadings' numberings.""",
-        ),
-        ("human", text),
-    ]
+    prompt = f"""
+        I have a block of text where some words are concatenated due to errors in PDF extraction. Your task is to identify where spaces are missing between words and add them where necessary. Please only adjust spacing—do not modify punctuation, capitalization, or any part of the text otherwise. Return the modified text with spaces added where needed in a json format as follows: {{"output": "modified text here"}} Say nothing else and don't change anything else. Be specifically careful about not modifying headings and subheadings' numberings.
+        Text: {text}
+    """
 
-    return generate_response(messages)
+    return generate_response(prompt)
 
 
 def inject_whitespace(content: str, num_changes_threshold: int = 20) -> str:
     injected_content = inject_whitespace_w_llm(content)
+
+    if isinstance(injected_content, dict):
+        injected_content = injected_content["output"]
 
     num_changes = has_significant_changes(content, injected_content)
     if num_changes > num_changes_threshold:
@@ -92,9 +72,9 @@ def preprocess_content(content: str, whitespace_injection: bool = False, is_repl
         content = inject_whitespace(content)
 
     if is_replace_abbreviations:
-        return replace_abbreviations(content, ABBREVIATION_DICT)
+        return replace_abbreviations(content)
     else:
-        return content
+        return content, 0
 
 
 def remove_string(content: str, string: str, case_sensitive=True) -> str:
@@ -125,6 +105,10 @@ def load_document(file_path, pages: list[int] = []) -> Document:
             doc.add_page(Page(page_number=i + 1, token_count=None, raw_content=page_content, processed_content=None))
     elif file_path.endswith(".pkl"):
         doc = Document.load(file_path)
+        for page in doc.pages:
+            if page.page_number not in pages:
+                print(f"Document has extra page: {page.page_number}!")
+                break
     else:
         raise ValueError("Unsupported file format. Only PDF and pickle files are supported.")
 
@@ -132,16 +116,20 @@ def load_document(file_path, pages: list[int] = []) -> Document:
 
 
 def process_document(
-    document: Document, whitespace_injection: bool = True, is_replace_abbreviations: bool = True
+    document: Document, whitespace_injection: bool = False, is_replace_abbreviations: bool = True
 ) -> Document:
-    global REPLACED_ABB_COUNT
-    REPLACED_ABB_COUNT = 0
+    total_replaced_abbrev_count = 0
     for page in document.pages:
-        page.processed_content = preprocess_content(page.raw_content, whitespace_injection, is_replace_abbreviations)
+        page.processed_content, replaced_count = preprocess_content(
+            page.raw_content, whitespace_injection, is_replace_abbreviations
+        )
+        total_replaced_abbrev_count += replaced_count
 
     if whitespace_injection:
-        document.save(document.path.replace(".pdf", "_processed_with_whitespace.pkl"))  # TODO: artifacts folder
-    print(f"Number of abbreviations replaced total: {REPLACED_ABB_COUNT}")
+        document.save(
+            document.path.replace(".pdf", f"_processed_with_whitespace_{time.time()}.pkl")
+        )  # TODO: artifacts folder
+    print(f"Number of abbreviations replaced total: {total_replaced_abbrev_count}")
     return document
 
 

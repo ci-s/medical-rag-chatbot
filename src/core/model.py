@@ -3,8 +3,33 @@ import json
 
 from settings.settings import settings
 from settings import LLM
+from prompts.question import QUESTION_PROMPT
+from domain.vignette import Vignette
+from .utils import replace_abbreviations
 
 MAX_NEW_TOKENS = 1024  # TODO: .env?
+
+
+def create_question_prompt(retrieved_documents, vignette: Vignette, question_id: int):
+    documents_str = "".join([f"{document}\n" for document in retrieved_documents])
+
+    preceding_questions = vignette.get_preceding_questions(question_id)
+    preceding_qa_str = ""
+    for q in preceding_questions:
+        preceding_qa_str += f"Question: {q.get_question()}\nAnswer: {q.get_answer()}\n\n"
+
+    prompt = QUESTION_PROMPT.format(
+        retrieved_documents=documents_str,
+        background=vignette.background,
+        context=vignette.context,
+        preceding_question_answer_pairs=preceding_qa_str,
+        query=vignette.get_question(question_id).question,
+    )
+    prompt, replaced_count = replace_abbreviations(prompt)
+
+    print("Prompt:", prompt)
+    print(f"Number of abbreviations replaced: {replaced_count}")
+    return prompt
 
 
 class PromptFormat_llama3:

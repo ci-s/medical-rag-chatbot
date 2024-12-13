@@ -3,10 +3,10 @@ from typing import Literal
 import json
 
 from services.retrieval import FaissService, retrieve
-from core.model import generate_response
+from core.model import generate_response, create_question_prompt
 from domain.evaluation import Feedback
 from settings import VIGNETTE_COLLECTION
-from prompts import GENERATION_EVALUATION_PROMPT, create_question_prompt
+from prompts import GENERATION_EVALUATION_PROMPT
 
 
 def evaluate_single(vignette_id: int, question: str, faiss_service: FaissService, top_k: int = 3) -> Feedback:

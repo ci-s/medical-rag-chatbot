@@ -46,10 +46,10 @@ def evaluate_single(query: str, retrieved_passages: list[Chunk]) -> Stats | None
 
 def evaluate_source(
     source: Literal["Handbuch", "Antibiotika"],
-    chunks: list[Chunk],
     faiss_service: FaissService,
     top_k: int = 3,
     text_only: bool = False,
+    include_context: bool = False,
 ) -> int:
     all_stats = []
 
@@ -58,11 +58,16 @@ def evaluate_source(
             if question.get_source() != source:
                 continue
 
+            if include_context:
+                query_text = vignette.get_context() + question.get_question()
+            else:
+                query_text = question.get_question()
+
             if text_only and question.text_only:
-                retrieved_documents = retrieve(question.question, faiss_service, top_k=top_k)
+                retrieved_documents = retrieve(query_text, faiss_service, top_k=top_k)
                 all_stats.append(evaluate_single(question.get_question(), retrieved_documents))
             elif not text_only:
-                retrieved_documents = retrieve(question.question, faiss_service, top_k=top_k)
+                retrieved_documents = retrieve(query_text, faiss_service, top_k=top_k)
                 all_stats.append(evaluate_single(question.get_question(), retrieved_documents))
             else:
                 pass
