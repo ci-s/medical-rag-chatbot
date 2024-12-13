@@ -58,6 +58,25 @@ class Vignette:
         print(f"Question with id {id} not found in vignette {self.id}")
         return None
 
+    def get_preceding_questions(self, id: int) -> list[Question]:
+        id_found = False
+        preceding_questions = []
+        for question in self.questions:
+            if question.get_id() < id:
+                preceding_questions.append(question)
+            elif question.get_id() == id:
+                id_found = True
+                break
+
+        if not id_found:
+            print(f"Question with id {id} not found in vignette {self.id}")
+            return []
+
+        if len(preceding_questions) == 0:
+            print(f"No preceding questions found for question with id {id} in vignette {self.id}")
+
+        return preceding_questions
+
     def get_background(self) -> str:
         return self.background
 
@@ -95,7 +114,11 @@ class VignetteCollection:
         return None
 
     def label_text_only_questions(self, text_pages) -> None:
+        id_list = []  # TODO: decide should it stay here or not
+
         for vignette in self.vignettes:
             for question in vignette.get_questions():
                 if all(p in text_pages for p in question.reference):
                     question.text_only = True
+                    id_list.append(question.id)
+        print("Text only questions labeled, ids are as follows: ", id_list)

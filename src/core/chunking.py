@@ -66,6 +66,7 @@ def get_headings(document: Document) -> list[str]:
 
     for page in document.pages:
         response = generate_response(HEADINGS_PROMPT + page.processed_content)
+        print(response)
         if isinstance(response, list):
             heading_dict_list = response
         else:

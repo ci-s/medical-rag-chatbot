@@ -4,7 +4,8 @@ QUESTION_PROMPT = """
     Related information:\n{retrieved_documents}
     
     Background:\n{background}
-    Question:\n{query}
+    Context:\n{context}
+    Questions:{preceding_question_answer_pairs}\n{query}
     
     Answer:\n
 """

@@ -1,5 +1,8 @@
 import re
+from typing import Union
+
 from domain.document import Document
+from settings import ABBREVIATION_DICT
 
 
 def levenshteinDistance(s1, s2):
@@ -33,3 +36,27 @@ def merge_document(document: Document, pages: list[int], raw: bool = False) -> s
             doc = doc + "\f" + page.processed_content
 
     return doc
+
+
+def replace_abbreviations(text: str) -> Union[str, int]:
+    simple_abbreviations = [abbr for abbr in ABBREVIATION_DICT if abbr.isalnum()]
+    complex_abbreviations = [abbr for abbr in ABBREVIATION_DICT if not abbr.isalnum()]
+
+    simple_pattern = r"\b(" + "|".join(re.escape(abbr) for abbr in simple_abbreviations) + r")\b"
+
+    complex_pattern = r"(" + "|".join(re.escape(abbr) for abbr in complex_abbreviations) + r")(?=\W|$)"
+
+    pattern = re.compile(f"{simple_pattern}|{complex_pattern}")
+
+    count = 0
+
+    def replacer(match):
+        nonlocal count
+        count += 1
+        return ABBREVIATION_DICT[match.group()]
+
+    result_text = pattern.sub(replacer, text)
+
+    print(f"Number of abbreviations replaced: {count}")
+
+    return result_text, count
