@@ -72,11 +72,37 @@ def get_headings(document: Document) -> list[str]:
         else:
             heading_dict_list = convert_output_to_json(response)
         headings.extend([d["number"] + ". " + d["heading"] for d in heading_dict_list])
+        print("page is done")
 
     return headings
 
 
-def split_by_headings(doc: str, headings: list[str]) -> dict:
+def build_heading_hierarchy(headings: list[str]) -> dict[str, str]:
+    """
+    Constructs a hierarchy of headings such that each heading includes its parent headings.
+    """
+    hierarchy = {}
+    current_path = []
+
+    for heading in headings:
+        number, title = heading.split(". ", 1)
+        levels = number.split(".")
+
+        while len(current_path) > len(levels):
+            current_path.pop()
+        current_path = current_path[: len(levels) - 1]
+        current_path.append(heading)
+
+        hierarchy[number] = " ".join([f"<{h}>" for h in current_path])
+
+    print("Heading hierarchy:\n", hierarchy)
+    return hierarchy
+
+
+def split_by_headings(doc: str, headings: list[str], hierarchy: dict[str, str]) -> dict:
+    """
+    Splits the document into sections by headings, including the full hierarchy.
+    """
     sections = {}
 
     headings_pattern = "|".join(
@@ -87,14 +113,14 @@ def split_by_headings(doc: str, headings: list[str]) -> dict:
     for i in range(1, len(split_content), 2):
         heading = split_content[i].strip()
         content = split_content[i + 1].strip() if i + 1 < len(split_content) else ""
-        sections[heading] = content
+        heading_number = heading.split(".")[0]  # Extract just the number part
+        full_hierarchy = hierarchy.get(heading_number, heading)
+        sections[full_hierarchy] = content
 
     return sections
 
 
 def postprocess_sections(sections: dict[str, str]) -> dict[str, str]:
-    # TODO: Maybe add higher level headings to the content of the lower level headings
-    # 4. Allgemeine Behandlungsmaßnahmen / Basistherapie 4.1 Oxygenierung content blabla
     return [heading + "\n" + content for heading, content in sections.items() if content.strip()]
 
 
@@ -103,13 +129,17 @@ def chunk_by_section(
     toc: Document,
     pages: list[int],
 ) -> list[Chunk]:
+    """
+    Splits a document into chunks based on its sections and headings hierarchy.
+    """
     headings = get_headings(toc)
     print("Extracted headings:\n")
     for heading in headings:
         print("\n" + heading)
 
+    hierarchy = build_heading_hierarchy(headings)
     document_str = merge_document(document, pages=pages)
-    sections = postprocess_sections(split_by_headings(document_str, headings))
+    sections = postprocess_sections(split_by_headings(document_str, headings, hierarchy))
     return [Chunk(section, None, None) for section in sections]
 
 
