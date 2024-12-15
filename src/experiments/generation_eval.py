@@ -31,7 +31,7 @@ faiss_service = FaissService()
 faiss_service.create_index(chunks)
 
 
-# evaluate_single(
+# f = evaluate_single(
 #     vignette_id=0,
 #     question="Es wird die Indikation zur Lysetherapie gestellt. Welche Blutdruckgrenze gilt es zu beachten?",
 #     faiss_service=faiss_service,

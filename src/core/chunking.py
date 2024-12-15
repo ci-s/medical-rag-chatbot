@@ -20,14 +20,22 @@ def chunk_by_size(document: Document, pages: list[int], chunk_size: int = 512, o
 
     docs = text_splitter.create_documents([document_str])
 
-    return [Chunk(document.page_content, None, None) for document in docs]
+    chunks = [Chunk(document.page_content, None, None) for document in docs]
+    chunks, problem_count = match_chunks_with_pages(chunks, document, pages)
+    if problem_count > 0:
+        raise ValueError("Problems encountered during matchinkg chunks with pages")
+    return chunks
 
 
 def chunk_semantic(document: Document, pages: list[int]) -> list[Chunk]:
     document_str = merge_document(document, pages=pages)
     text_splitter = SemanticChunker(NomicEmbeddings(model="nomic-embed-text-v1.5"))
     chunks = text_splitter.split_text(document_str)  # or create_documents using my get_document
-    return [Chunk(chunk, None, None) for chunk in chunks]
+    chunks = [Chunk(chunk, None, None) for chunk in chunks]
+    chunks, problem_count = match_chunks_with_pages(chunks, document, pages)
+    if problem_count > 0:
+        raise ValueError("Problems encountered during matchinkg chunks with pages")
+    return chunks
 
 
 def convert_output_to_json(output: str):
@@ -72,11 +80,37 @@ def get_headings(document: Document) -> list[str]:
         else:
             heading_dict_list = convert_output_to_json(response)
         headings.extend([d["number"] + ". " + d["heading"] for d in heading_dict_list])
+        print("page is done")
 
     return headings
 
 
-def split_by_headings(doc: str, headings: list[str]) -> dict:
+def build_heading_hierarchy(headings: list[str]) -> dict[str, str]:
+    """
+    Constructs a hierarchy of headings such that each heading includes its parent headings.
+    """
+    hierarchy = {}
+    current_path = []
+
+    for heading in headings:
+        number, title = heading.split(". ", 1)
+        levels = number.split(".")
+
+        while len(current_path) > len(levels):
+            current_path.pop()
+        current_path = current_path[: len(levels) - 1]
+        current_path.append(heading)
+
+        hierarchy[number] = " ".join([f"{h}" for h in current_path])
+
+    print("Heading hierarchy:\n", hierarchy)
+    return hierarchy
+
+
+def split_by_headings(doc: str, headings: list[str], hierarchy: dict[str, str]) -> dict:
+    """
+    Splits the document into sections by headings, including the full hierarchy.
+    """
     sections = {}
 
     headings_pattern = "|".join(
@@ -87,15 +121,26 @@ def split_by_headings(doc: str, headings: list[str]) -> dict:
     for i in range(1, len(split_content), 2):
         heading = split_content[i].strip()
         content = split_content[i + 1].strip() if i + 1 < len(split_content) else ""
-        sections[heading] = content
+        heading_number = heading.split(".")[0]  # Extract just the number part
+        full_hierarchy = hierarchy.get(heading_number, heading)
+        sections[heading] = {"full_hierarchy": full_hierarchy, "content": content}
 
     return sections
 
 
-def postprocess_sections(sections: dict[str, str]) -> dict[str, str]:
-    # TODO: Maybe add higher level headings to the content of the lower level headings
-    # 4. Allgemeine Behandlungsmaßnahmen / Basistherapie 4.1 Oxygenierung content blabla
-    return [heading + "\n" + content for heading, content in sections.items() if content.strip()]
+def postprocess_sections(sections: dict[str, str], lean=True) -> dict[str, str]:
+    if lean:
+        return [
+            heading + "\n" + hr_content_dict["content"]
+            for heading, hr_content_dict in sections.items()
+            if hr_content_dict["content"].strip()
+        ]
+    else:
+        return [
+            hr_content_dict["full_hierarchy"] + "\n" + hr_content_dict["content"]
+            for _, hr_content_dict in sections.items()
+            if hr_content_dict["content"].strip()
+        ]
 
 
 def chunk_by_section(
@@ -103,14 +148,30 @@ def chunk_by_section(
     toc: Document,
     pages: list[int],
 ) -> list[Chunk]:
+    """
+    Splits a document into chunks based on its sections and headings hierarchy.
+    """
     headings = get_headings(toc)
     print("Extracted headings:\n")
     for heading in headings:
         print("\n" + heading)
 
+    hierarchy = build_heading_hierarchy(headings)
     document_str = merge_document(document, pages=pages)
-    sections = postprocess_sections(split_by_headings(document_str, headings))
-    return [Chunk(section, None, None) for section in sections]
+    sections = split_by_headings(document_str, headings, hierarchy)
+
+    # This is required because adding higher level titles interfere with matching with pages
+    lean_heading_sections = postprocess_sections(sections, lean=True)
+    chunks = [Chunk(section, None, None) for section in lean_heading_sections]
+
+    chunks, problem_count = match_chunks_with_pages(chunks, document, pages)
+    sections_with_full_hieararchy_titles = postprocess_sections(sections, lean=False)
+
+    for i in range(len(chunks)):
+        chunks[i].text = sections_with_full_hieararchy_titles[i]
+    if problem_count > 0:
+        raise ValueError("Problems encountered during matchinkg chunks with pages")
+    return chunks
 
 
 def match_chunks_with_pages(
@@ -192,7 +253,4 @@ def chunk_document(
 
     print("Number of chunks created: ", len(chunks))
 
-    chunks, problem_count = match_chunks_with_pages(chunks, document, pages)
-    if problem_count > 0:
-        raise ValueError("Problems encountered during matchinkg chunks with pages")
     return chunks
