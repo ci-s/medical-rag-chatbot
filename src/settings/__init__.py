@@ -2,16 +2,16 @@ import pandas as pd
 import os
 import json
 
-from settings.settings import settings
+from settings.settings import settings, config
 from domain.vignette import VignetteCollection
 
 
 def setup_model():
-    if settings.inference_type == "exllama":
+    if config.inference_type == "exllama":
         from exllamav2 import ExLlamaV2, ExLlamaV2Config, ExLlamaV2Cache, ExLlamaV2Tokenizer
         from exllamav2.generator import ExLlamaV2DynamicGenerator
 
-        config = ExLlamaV2Config(settings.llm_path)
+        config = ExLlamaV2Config(config.llm_path)
 
         config.arch_compat_overrides()
         model = ExLlamaV2(config)
@@ -27,7 +27,7 @@ def setup_model():
         generator.warmup()
 
         return generator
-    elif settings.inference_type == "ollama":
+    elif config.inference_type == "ollama":
         from langchain_core.output_parsers import JsonOutputParser
         from langchain_ollama import ChatOllama
 
@@ -59,9 +59,9 @@ def get_page_types():
     return text_pages, page_types["flowchart"], page_types["table"], page_types["visual"]
 
 
-if settings.inference_location == "local":
+if config.inference_location == "local":
     LLM = setup_model()
-elif settings.inference_location == "remote":
+elif config.inference_location == "remote":
     LLM = None  # TODO
 
 

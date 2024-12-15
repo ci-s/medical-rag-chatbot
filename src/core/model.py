@@ -1,7 +1,7 @@
 import requests
 import json
 
-from settings.settings import settings
+from settings.settings import settings, config
 from settings import LLM
 from prompts.question import QUESTION_PROMPT
 from domain.vignette import Vignette
@@ -13,21 +13,29 @@ MAX_NEW_TOKENS = 1024  # TODO: .env?
 def create_question_prompt(retrieved_documents, vignette: Vignette, question_id: int):
     documents_str = "".join([f"{document}\n" for document in retrieved_documents])
 
-    preceding_questions = vignette.get_preceding_questions(question_id)
-    preceding_qa_str = ""
-    for q in preceding_questions:
-        preceding_qa_str += f"Question: {q.get_question()}\nAnswer: {q.get_answer()}\n\n"
+    if config.include_preceding_question_answers:
+        preceding_questions = vignette.get_preceding_questions(question_id)
+        preceding_qa_str = ""
+        for q in preceding_questions:
+            preceding_qa_str += f"Question: {q.get_question()}\nAnswer: {q.get_answer()}\n\n"
+    else:
+        preceding_qa_str = ""
+
+    if config.include_context:
+        context = "Context:\n" + vignette.context
+    else:
+        context = ""
 
     prompt = QUESTION_PROMPT.format(
         retrieved_documents=documents_str,
         background=vignette.background,
-        context=vignette.context,
+        context=context,
         preceding_question_answer_pairs=preceding_qa_str,
         query=vignette.get_question(question_id).question,
     )
     prompt, replaced_count = replace_abbreviations(prompt)
 
-    print("Prompt:", prompt)
+    print("Prompt:", prompt)  # TODO: Some logging for experimenting
     print(f"Number of abbreviations replaced: {replaced_count}")
     return prompt
 
@@ -82,10 +90,10 @@ prompt_format = PromptFormat_llama3()
 
 
 def generate_response(prompt: str) -> str:
-    if settings.inference_location == "local":
-        if settings.inference_type == "exllama":
+    if config.inference_location == "local":
+        if config.inference_type == "exllama":
             return LLM.generate(prompt=prompt, max_new_tokens=MAX_NEW_TOKENS, add_bos=True)
-        elif settings.inference_type == "ollama":
+        elif config.inference_type == "ollama":
             # url = "http://localhost:11434/api/generate"
             # model_name = "llama3.1"  #:8b-instruct-q4_0
             # stream = False
@@ -104,7 +112,7 @@ def generate_response(prompt: str) -> str:
             return LLM.invoke(prompt)["output"]  # TODO: messages?
         else:
             raise ValueError("Invalid inference type")
-    elif settings.inference_location == "remote":
+    elif config.inference_location == "remote":
         url = "http://localhost:8082/generate"
         headers = {"Content-Type": "application/json"}
 
