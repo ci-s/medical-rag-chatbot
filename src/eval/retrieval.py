@@ -7,6 +7,7 @@ from domain.evaluation import Stats
 from services.retrieval import FaissService, retrieve
 
 from settings import VIGNETTE_COLLECTION
+from settings.settings import config
 
 
 def get_references_w_id(vignette_id, question_id) -> list[int]:
@@ -47,7 +48,7 @@ def evaluate_single(query: str, retrieved_passages: list[Chunk]) -> Stats | None
 def evaluate_source(
     source: Literal["Handbuch", "Antibiotika"],
     faiss_service: FaissService,
-    top_k: int = 3,
+    top_k: int = config.top_k,
     text_only: bool = False,
     include_context: bool = False,
 ) -> int:

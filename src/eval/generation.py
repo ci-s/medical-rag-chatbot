@@ -21,15 +21,15 @@ def evaluate_single(vignette_id: int, question: str, faiss_service: FaissService
     answer = None
     for question_obj in questions:
         if question == question_obj.question:
-            background = vignette.get_background()
-            answer = question_obj.get_answer()
+            question_id = question_obj.id  # tODO: get id directly instead of matching the str query
+            break
 
     if background is None or answer is None:
         print(f"Question not found in vignette {vignette_id}")
         return None
 
     retrieved_documents = retrieve(question, faiss_service, top_k=top_k)
-    prompt = create_question_prompt(retrieved_documents, background, question)
+    prompt = create_question_prompt(retrieved_documents, vignette, question_id)
 
     response = generate_response(prompt)
 

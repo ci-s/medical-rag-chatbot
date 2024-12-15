@@ -13,9 +13,9 @@ import os
 project_root = os.path.abspath(os.path.join(os.getcwd(), ".."))
 sys.path.append(project_root)
 
-from settings.settings import settings
+from settings.settings import settings, config
 
-MAX_NEW_TOKENS = 250
+MAX_NEW_TOKENS = config.max_new_tokens
 config = ExLlamaV2Config(settings.llm_path)
 
 config.arch_compat_overrides()
@@ -23,10 +23,6 @@ model = ExLlamaV2(config)
 cache = ExLlamaV2Cache(model, max_seq_len=16384, lazy=True)
 model.load_autosplit(cache, progress=False)
 tokenizer = ExLlamaV2Tokenizer(config)
-
-# Figure out temperature setting
-# settings = ExLlamaV2Sampler.Settings()
-# settings.temperature = 0.85
 
 generator = ExLlamaV2DynamicGenerator(
     model=model,
@@ -90,6 +86,7 @@ def format_prompt(prompt_format: PromptFormat_llama3, user_prompt, first=True):
 prompt_format = PromptFormat_llama3()
 add_bos, add_eos, encode_special_tokens = prompt_format.encoding_options()
 stop_conditions = prompt_format.stop_conditions(tokenizer)
+
 app = FastAPI()
 
 
@@ -109,6 +106,7 @@ async def generate(request: Request) -> Response:
         add_bos=add_bos,
         stop_conditions=stop_conditions,
         completion_only=True,
+        seed=15,
     )
     return JSONResponse(response)
 

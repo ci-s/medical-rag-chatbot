@@ -5,7 +5,8 @@ QUESTION_PROMPT = """
     
     Background:\n{background}
     Context:\n{context}
-    Questions:{preceding_question_answer_pairs}\n{query}
+    
+    {preceding_question_answer_pairs}\n{query}
     
     Answer:\n
 """

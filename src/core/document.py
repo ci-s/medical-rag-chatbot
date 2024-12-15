@@ -86,6 +86,11 @@ def remove_string(content: str, string: str, case_sensitive=True) -> str:
     return re.sub(pattern, " ", content)
 
 
+def filter_document(document: Document, pages: list[int]) -> Document:
+    document.pages = [page for page in document.pages if page.page_number in pages]
+    return document
+
+
 def load_document(file_path, pages: list[int] = []) -> Document:
     """
     TODO: Add docstring
@@ -105,10 +110,11 @@ def load_document(file_path, pages: list[int] = []) -> Document:
             doc.add_page(Page(page_number=i + 1, token_count=None, raw_content=page_content, processed_content=None))
     elif file_path.endswith(".pkl"):
         doc = Document.load(file_path)
-        for page in doc.pages:
-            if page.page_number not in pages:
-                print(f"Document has extra page: {page.page_number}!")
-                break
+        doc = filter_document(doc, pages)
+        print("Document pages are filtered. The number of pages: ", len(doc.pages))
+        for page in pages:
+            if page not in [page.page_number for page in doc.pages]:
+                raise ValueError(f"Page {page} not found in the document.")
     else:
         raise ValueError("Unsupported file format. Only PDF and pickle files are supported.")
 

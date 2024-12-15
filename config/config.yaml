@@ -1,0 +1,20 @@
+inference_type: "exllama" # exllama or ollama
+inference_location: "remote" # remote or local
+llm_path: "" # set only if inference_type is "exllama" and inference_location is "local" # this is actually model paramterer
+
+text_questions_only: true
+replace_abbreviations: true
+# if true then go grab the saved doc
+inject_whitespace: true
+# if true then go grab the saved doc
+
+
+chunk_method: size # size, section, semantic
+top_k: 5
+
+experiment_name: trial
+
+include_context: true
+include_preceding_question_answers: true
+
+max_new_tokens: 250
