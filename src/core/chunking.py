@@ -121,8 +121,16 @@ def split_by_headings(doc: str, headings: list[str], hierarchy: dict[str, str]) 
     for i in range(1, len(split_content), 2):
         heading = split_content[i].strip()
         content = split_content[i + 1].strip() if i + 1 < len(split_content) else ""
-        heading_number = heading.split(".")[0]  # Extract just the number part
-        full_hierarchy = hierarchy.get(heading_number, heading)
+        heading_number_match = re.match(r"^([\d.]+)", heading)  # Extract just the number part
+        if heading_number_match:
+            heading_number = heading_number_match.group(1)  # Full numeric structure
+        else:
+            heading_number = heading
+
+        if heading_number.endswith("."):
+            heading_number = heading_number[:-1]
+        print("Detected heading numbr: ", heading_number)
+        full_hierarchy = hierarchy.get(heading_number, "NOT RETURNED")
         sections[heading] = {"full_hierarchy": full_hierarchy, "content": content}
 
     return sections
@@ -240,10 +248,13 @@ def chunk_document(
     method: Literal["size", "semantic", "section"], document: Document, pages: list[int], **kwargs
 ) -> list[Chunk]:
     if method == "size":
+        print("Chunking by size")
         chunks = chunk_by_size(document, pages, **kwargs)
     elif method == "semantic":
+        print("Chunking by semantic")
         chunks = chunk_semantic(document, pages, **kwargs)
     elif method == "section":
+        print("Chunking by section")
         toc = kwargs.pop("toc", None)
         if toc is None:
             ValueError("toc document must be provided for section method")

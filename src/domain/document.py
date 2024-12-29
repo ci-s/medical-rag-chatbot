@@ -43,6 +43,9 @@ class Document:
         print(f"Document loaded from {filepath}")
         return document
 
+    def __str__(self) -> str:
+        print(f"Document with {len(self.pages)} pages from {self.path}")
+
 
 class Chunk:
     def __init__(self, text, start_page, end_page):
