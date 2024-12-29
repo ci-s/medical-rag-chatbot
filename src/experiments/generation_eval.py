@@ -30,14 +30,22 @@ chunks = chunk_document(method="size", document=document, pages=pages, chunk_siz
 faiss_service = FaissService()
 faiss_service.create_index(chunks)
 
+top_k = 3
+model = "8B"
+text_only = True
+if text_only:
+    questions = "text-only"
+else:
+    questions = "all"
 
 # f = evaluate_single(
 #     vignette_id=0,
-#     question="Es wird die Indikation zur Lysetherapie gestellt. Welche Blutdruckgrenze gilt es zu beachten?",
+#     question_id=1,
 #     faiss_service=faiss_service,
 # )
+# f.to_dict()
 
-avg_score, all_feedbacks = evaluate_source("Handbuch", faiss_service, top_k=3, text_only=True)
+avg_score, all_feedbacks = evaluate_source("Handbuch", faiss_service, top_k=top_k, text_only=text_only)
 
 scores = []
 for feedback in all_feedbacks:
@@ -46,11 +54,18 @@ for feedback in all_feedbacks:
 counted_values = Counter(scores)
 std_dev = statistics.stdev(scores)
 
-result = {"avg_score": avg_score, "std_dev": std_dev, "counted_values": counted_values}
-result["all_feedbacks"] = [fb.to_dict() for fb in all_feedbacks]
+result = {
+    "avg_score": avg_score,
+    "std_dev": std_dev,
+    "counted_values": counted_values,
+    "questions": questions,
+    "topk": top_k,
+    "model": model,
+    "all_feedbacks": [fb.to_dict() for fb in all_feedbacks],
+}
 
 output_file = f"generation_eval_{int(time.time())}.json"
-with open(os.path.join(settings.data_path, output_file), "w") as file:
+with open(os.path.join(settings.results_path, output_file), "w") as file:
     json.dump(result, file, indent=4)
 
 print(result)

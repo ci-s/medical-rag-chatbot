@@ -19,6 +19,8 @@ class Settings(BaseSettings):
     page_types_json_path: Path
     config_path: Path
 
+    results_path: Path
+
 
 load_dotenv()
 settings = Settings()

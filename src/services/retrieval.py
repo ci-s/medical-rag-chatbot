@@ -3,6 +3,7 @@ from typing import Any
 
 from core.embedding import embed_chunks
 from settings.settings import config
+from core.utils import replace_abbreviations
 
 
 class FaissService:
@@ -35,6 +36,7 @@ class FaissService:
 
 
 def retrieve(query: str, faiss_service: FaissService, top_k: int = config.top_k):
+    query, _ = replace_abbreviations(query)
     query_embedding = embed_chunks(query, task_type="search_query")
 
     similarity, retrieved_documents = faiss_service.search_index(query_embedding, top_k)
