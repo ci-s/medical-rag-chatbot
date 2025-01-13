@@ -1,4 +1,5 @@
 from pathlib import Path
+from typing import Literal
 from dotenv import load_dotenv
 import yaml
 
@@ -39,6 +40,17 @@ class Config(BaseModel):
     include_context: bool = True
     include_preceding_question_answers: bool = True
     max_new_tokens: int = 250
+    optimization_method: (
+        Literal[
+            "hypothetical_document",
+            "stepback",
+            "decomposing",
+            "paraphrasing",
+        ]
+        | None
+    ) = None
+    use_original_query_only: bool = True  # overides use_original_along_with_optimized
+    use_original_along_with_optimized: bool = False
 
     def dump(self, file_path: str) -> None:
         with open(file_path, "w", encoding="utf-8") as file:

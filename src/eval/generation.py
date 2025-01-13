@@ -3,7 +3,7 @@ from typing import Literal
 import json
 
 from services.retrieval import FaissService, retrieve
-from core.model import generate_response, create_question_prompt
+from core.model import generate_response, create_question_prompt_w_docs
 from domain.evaluation import Feedback
 from settings import VIGNETTE_COLLECTION
 from prompts import GENERATION_EVALUATION_PROMPT
@@ -28,13 +28,13 @@ def evaluate_single(vignette_id: int, question_id: int, faiss_service: FaissServ
         return None
 
     retrieved_documents = retrieve(question.get_question(), faiss_service, top_k=top_k)
-    prompt = create_question_prompt(retrieved_documents, vignette, question_id)
+    user_prompt = create_question_prompt_w_docs(retrieved_documents, vignette, question)
 
-    response = generate_response(prompt)
+    response = generate_response(user_prompt)
 
     eval_prompt = GENERATION_EVALUATION_PROMPT.format(
         instruction=f"""        
-            Related information:\n{''.join([f"{docu}\n" for docu in retrieved_documents])}
+            Related information:\n{"".join([f"{docu}\n" for docu in retrieved_documents])}
                     
             Background:\n{background}
             Question:\n{question.get_question()}
