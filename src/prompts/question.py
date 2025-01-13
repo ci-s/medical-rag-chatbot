@@ -3,10 +3,7 @@ QUESTION_PROMPT = """
 
     Related information:\n{retrieved_documents}
     
-    Background:\n{background}
-    Context:\n{context}
-    
-    {preceding_question_answer_pairs}\n{query}
+    {user_prompt}
     
     Answer:\n
 """

@@ -1,20 +1,16 @@
 import requests
 import json
 
-from settings.settings import settings, config
+from settings.settings import config
 from settings import LLM
-from prompts.question import QUESTION_PROMPT
-from domain.vignette import Vignette
+from prompts import QUESTION_PROMPT, VIGNETTE_PROMPT
+from domain.vignette import Vignette, Question
 from .utils import replace_abbreviations
 
-MAX_NEW_TOKENS = 1024  # TODO: .env?
 
-
-def create_question_prompt(retrieved_documents, vignette: Vignette, question_id: int):
-    documents_str = "".join([f"{document}\n" for document in retrieved_documents])
-
+def create_user_question_prompt(vignette: Vignette, question: Question) -> str:
     if config.include_preceding_question_answers:
-        preceding_questions = vignette.get_preceding_questions(question_id)
+        preceding_questions = vignette.get_preceding_questions(question.id)
         preceding_qa_str = ""
         for q in preceding_questions:
             preceding_qa_str += f"Question: {q.get_question()}\nAnswer: {q.get_answer()}\n\n"
@@ -26,14 +22,25 @@ def create_question_prompt(retrieved_documents, vignette: Vignette, question_id:
     else:
         context = ""
 
-    prompt = QUESTION_PROMPT.format(
-        retrieved_documents=documents_str,
+    print("Question: ", question.get_question())
+    return VIGNETTE_PROMPT.format(
         background=vignette.background,
         context=context,
         preceding_question_answer_pairs=preceding_qa_str,
-        query=vignette.get_question(question_id).question,
+        query=question.get_question(),
     )
-    prompt, replaced_count = replace_abbreviations(prompt)
+
+
+def create_question_prompt_w_docs(retrieved_documents, vignette: Vignette, question: Question) -> str:
+    documents_str = "".join([f"{document}\n" for document in retrieved_documents])
+
+    user_prompt = create_user_question_prompt(vignette, question.get_question())
+
+    user_prompt = QUESTION_PROMPT.format(
+        retrieved_documents=documents_str,
+        user_prompt=user_prompt,
+    )
+    prompt, replaced_count = replace_abbreviations(user_prompt)
 
     print("Prompt:", prompt)  # TODO: Some logging for experimenting
     print(f"Number of abbreviations replaced: {replaced_count}")
@@ -75,11 +82,13 @@ class PromptFormat_llama3:
         return True
 
 
-def format_prompt(prompt_format: PromptFormat_llama3, user_prompt, first=True):
+def format_prompt(prompt_format: PromptFormat_llama3, user_prompt, system_prompt=None, first=True):
+    if system_prompt is None:
+        system_prompt = prompt_format.default_system_prompt()
     if first:
         return (
             prompt_format.first_prompt()
-            .replace("<|system_prompt|>", prompt_format.default_system_prompt())
+            .replace("<|system_prompt|>", system_prompt)
             .replace("<|user_prompt|>", user_prompt)
         )
     else:
@@ -89,10 +98,11 @@ def format_prompt(prompt_format: PromptFormat_llama3, user_prompt, first=True):
 prompt_format = PromptFormat_llama3()
 
 
-def generate_response(prompt: str) -> str:
+def generate_response(user_prompt: str, system_prompt: str = None) -> str:
     if config.inference_location == "local":
         if config.inference_type == "exllama":
-            return LLM.generate(prompt=prompt, max_new_tokens=MAX_NEW_TOKENS, add_bos=True)
+            formatted_prompt = format_prompt(prompt_format, user_prompt, system_prompt, first=True)
+            return LLM.generate(prompt=formatted_prompt, max_new_tokens=config.max_new_tokens, add_bos=True)
         elif config.inference_type == "ollama":
             # url = "http://localhost:11434/api/generate"
             # model_name = "llama3.1"  #:8b-instruct-q4_0
@@ -109,15 +119,15 @@ def generate_response(prompt: str) -> str:
             # response = requests.post(url, json=data)
 
             # return response.json()["response"]
-            return LLM.invoke(prompt)["output"]  # TODO: messages?
+            return LLM.invoke(user_prompt)["output"]  # TODO: messages?
         else:
             raise ValueError("Invalid inference type")
     elif config.inference_location == "remote":
         url = "http://localhost:8082/generate"
         headers = {"Content-Type": "application/json"}
 
-        formatted_prompt = format_prompt(prompt_format, prompt, first=True)
-        data = {"prompt": formatted_prompt, "max_new_tokens": MAX_NEW_TOKENS}
+        formatted_prompt = format_prompt(prompt_format, user_prompt, system_prompt, first=True)
+        data = {"prompt": formatted_prompt, "max_new_tokens": config.max_new_tokens}
         response = requests.post(url, headers=headers, data=json.dumps(data))
         try:
             parsed_response = response.json()  # Automatically parses JSON
