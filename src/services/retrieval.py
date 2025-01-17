@@ -8,6 +8,8 @@ from domain.vignette import Vignette, Question
 from core.model import create_user_question_prompt, generate_response
 from prompts import HYPOTHETICAL_DOCUMENT_PROMPT, STEPBACK_PROMPT, DECOMPOSING_PROMPT, PARAPHRASING_PROMPT
 
+from langchain_core.output_parsers import BaseOutputParser
+
 
 class FaissService:
     def __init__(self):
@@ -42,50 +44,30 @@ def _retrieve(query: str, faiss_service: FaissService) -> list[str]:
     query, _ = replace_abbreviations(query)
     query_embedding = embed_chunks(query, task_type="search_query")
 
-    similarity, retrieved_documents = faiss_service.search_index(query_embedding, config.top_k)
+    similarities, retrieved_documents = faiss_service.search_index(query_embedding, config.top_k)
 
     print("Retrieved documents:")
     for i, retrieved_document in enumerate(retrieved_documents):
-        print("*" * 20, f"Retrieval {i + 1} with similarity score {similarity[i]}", "*" * 20)
+        print("*" * 20, f"Retrieval {i + 1} with similarity score {similarities[i]}", "*" * 20)
         print(retrieved_document)
 
     return retrieved_documents
-
-
-from langchain_core.output_parsers import BaseOutputParser
-
-
-# class LineListOutputParser(BaseOutputParser[list[str]]):
-#     """Output parser for a list of lines."""
-
-#     def parse(self, text: str) -> list[str]:
-#         text = text.replace("\\n", "\n").replace("\n\n", "\n")
-#         lines = text.strip().split("\n")
-#         return list(filter(None, lines))  # Remove empty lines
 
 
 class LineListOutputParser(BaseOutputParser[list[str]]):
     """Robust output parser for a list of lines."""
 
     def parse(self, text: str) -> list[str]:
-        # Ensure newlines are properly interpreted (e.g., handle escaped \n)
         if "\\n" in text:
             text = text.replace("\\n", "\n")
-
-        # Replace double newlines with single newlines for consistency
         text = text.replace("\n\n", "\n")
-
-        # Split into lines
         lines = text.strip().split("\n")
-
-        # Clean each line: strip whitespace, remove stray quotes
         cleaned_lines = [line.strip().strip('"').strip("'") for line in lines if line.strip()]
 
-        # Return only non-empty lines
         return list(filter(None, cleaned_lines))
 
 
-output_parser = LineListOutputParser()
+output_parser = LineListOutputParser()  # TODO: Move
 
 
 def parse_optimized_query(response: str) -> str:
@@ -118,18 +100,20 @@ def get_optimization_prompt() -> str:
 
 
 def retrieve_and_rank(queries: list[str], faiss_service: FaissService):
-    # Current implementation returns the most common top k documents
-    # If there were multiple documents with the same count, then the order is not guaranteed
-    retrieved_documents = []
+    # Current implementation returns top k documents with the highest scores from all queries
+    # Not exactly sure if this is the best way to combine results from multiple queries
+    # Because of the length of the queries, does it make sense to compare scores?
+    all_retrieved_documents = []
+
     for query in queries:
-        retrieved_documents.extend(_retrieve(query, faiss_service))
+        query, _ = replace_abbreviations(query)
+        query_embedding = embed_chunks(query, task_type="search_query")
 
-    from collections import Counter
+        similarities, retrieved_documents = faiss_service.search_index(query_embedding, config.top_k)
+        all_retrieved_documents.extend(zip(retrieved_documents, similarities))
 
-    counter = Counter(retrieved_documents)
-    print("Counts: ", counter)
-    most_common = counter.most_common(config.top_k)
-    return [doc for doc, _ in most_common]
+    all_retrieved_documents.sort(key=lambda x: x[1], reverse=True)
+    return [doc for doc, _ in all_retrieved_documents[: config.top_k]]
 
 
 def retrieve(
