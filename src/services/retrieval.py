@@ -1,4 +1,5 @@
 from typing import Literal
+from typing import Literal
 import faiss
 
 from core.embedding import embed_chunks
@@ -40,6 +41,7 @@ class FaissService:
         return D[0], [self.chunks[idx] for idx in I[0]]
 
 
+def _retrieve(query: str, faiss_service: FaissService) -> list[str]:
 def _retrieve(query: str, faiss_service: FaissService) -> list[str]:
     query, _ = replace_abbreviations(query)
     query_embedding = embed_chunks(query, task_type="search_query")

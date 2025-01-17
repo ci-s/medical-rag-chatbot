@@ -18,6 +18,6 @@ max_new_tokens: 1024
 # Retrieval
 chunk_method: size # size, section, semantic
 top_k: 5
-optimization_method: decomposing # paraphrasing # stepback # hypothetical_document
+optimization_method: hypothetical_document # decomposing # paraphrasing # stepback # hypothetical_document
 use_original_query_only: false
 use_original_along_with_optimized: false
