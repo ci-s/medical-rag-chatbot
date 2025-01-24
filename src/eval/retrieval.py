@@ -6,6 +6,7 @@ from domain.document import Chunk
 from domain.evaluation import Stats
 from services.retrieval import FaissService, retrieve
 from settings import VIGNETTE_COLLECTION
+from .retrieval_metrics import recall, precision
 
 
 def get_references_w_id(vignette_id, question_id) -> list[int]:
@@ -23,8 +24,6 @@ def get_references(query: str) -> list[int]:
 def evaluate_single(query: str, retrieved_passages: list[Chunk]) -> Stats | None:
     reference_pages = get_references(query)
     print("Reference pages are: ", reference_pages)
-    covered_reference_count = 0
-    total_reference_count = len(reference_pages)
     print(
         "Retrieved pages are: ",
         [
@@ -32,15 +31,7 @@ def evaluate_single(query: str, retrieved_passages: list[Chunk]) -> Stats | None
             for retrieved_passage in retrieved_passages
         ],
     )
-    if total_reference_count == 0:
-        return None
-    for reference_page in reference_pages:
-        for retrieved_passage in retrieved_passages:
-            if reference_page in list(range(retrieved_passage.start_page, retrieved_passage.end_page + 1)):
-                covered_reference_count += 1
-                break
-
-    return Stats(pct=covered_reference_count / total_reference_count, total=total_reference_count)
+    return recall(retrieved_passages, reference_pages)
 
 
 def evaluate_source(

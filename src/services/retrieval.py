@@ -42,7 +42,6 @@ class FaissService:
 
 
 def _retrieve(query: str, faiss_service: FaissService) -> list[str]:
-def _retrieve(query: str, faiss_service: FaissService) -> list[str]:
     query, _ = replace_abbreviations(query)
     query_embedding = embed_chunks(query, task_type="search_query")
 
