@@ -15,38 +15,27 @@ from core.chunking import chunk_document
 
 from settings.settings import settings
 from settings import get_page_types, config
-from eval.generation import evaluate_single, evaluate_source, evaluate_ragas
+from eval.generation import evaluate_ragas_qids
 
 file_path = os.path.join(settings.data_path, settings.file_name)
 
 pages, _, _, _ = get_page_types()
 print(f"Number of pages: {len(pages)}")
-# toc_pages=[2,3]
 
 document = get_document(file_path, pages)
-# toc = get_document(file_path, toc_pages)
 chunks = chunk_document(method="size", document=document, pages=pages, chunk_size=512)
 
 faiss_service = FaissService()
 faiss_service.create_index(chunks)
 
 
-text_only = True
-if text_only:
-    questions = "text-only"
-else:
-    questions = "all"
+# No retrieval optimization method
+question_ids_w_good_retrieval = [9, 14, 18, 23, 24, 30, 34, 35, 42, 43, 48, 51, 52, 65, 72, 81]  #
+# question_ids_w_good_retrieval_good_generation = 23
+# 26 = good retrieval, good generation but answer and context relevance = 0
 
-# f = evaluate_single(
-#     vignette_id=0,
-#     question_id=1,
-#     faiss_service=faiss_service,
-# )
-# f.to_dict()
-
-# avg_score, all_feedbacks = evaluate_source("Handbuch", faiss_service, text_only=text_only)
 result_dicts = []
-for optim_method in ["stepback"]:  # None, "hypothetical_document", "decomposing", "paraphrasing",
+for optim_method in [None]:  # "stepback", None, "hypothetical_document", "decomposing", "paraphrasing",
     if optim_method:
         config.optimization_method = optim_method
         config.use_original_query_only = False
@@ -54,28 +43,18 @@ for optim_method in ["stepback"]:  # None, "hypothetical_document", "decomposing
         config.optimization_method = None
         config.use_original_query_only = True
 
-    avg_score, all_feedbacks = evaluate_ragas("Handbuch", faiss_service, text_only=text_only)
-
-    # scores = []
-    # for feedback in all_feedbacks:
-    #     scores.append(float(feedback.score))
-
-    # counted_values = Counter(scores)
-    # std_dev = statistics.stdev(scores)
+    avg_score, all_feedbacks = evaluate_ragas_qids("Handbuch", faiss_service, question_ids_w_good_retrieval)
 
     result_dict = {
         "config": config.model_dump(),
         "all_feedbacks": [fb.to_dict() for fb in all_feedbacks],
         "avg_score": avg_score,
-        # "std_dev": std_dev,
-        # "counted_values": counted_values,
-        # "metric": "faithfulness",
     }
 
-    output_file = f"generation_eval_intermediate_{str(optim_method)}_{int(time.time())}.json"
-    output_path = os.path.join(settings.results_path, output_file)
-    with open(output_path, "w") as file:
-        json.dump(result_dict, file, indent=4)
+    # output_file = f"generation_eval_{config.experiment_name}_{str(optim_method)}_{int(time.time())}.json"
+    # output_path = os.path.join(settings.results_path, output_file)
+    # with open(output_path, "w") as file:
+    #     json.dump(result_dict, file, indent=4)
 
     result_dicts.append(result_dict)
 

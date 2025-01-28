@@ -53,7 +53,12 @@ def get_page_types():
 
     text_pages = []
     for p in all_pages:
-        if p not in page_types["flowchart"] and p not in page_types["table"] and p not in page_types["visual"]:
+        if (
+            p not in page_types["flowchart"]
+            and p not in page_types["table"]
+            and p not in page_types["visual"]
+            and p not in page_types["exclude"]
+        ):
             text_pages.append(p)
 
     return text_pages, page_types["flowchart"], page_types["table"], page_types["visual"]

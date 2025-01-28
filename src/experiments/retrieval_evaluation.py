@@ -33,28 +33,38 @@ method_args = {
     # "section": {"toc": toc},
 }
 
-model = "70B"
-text_only = True
-questions = "text-only"
 
-result_dict = {}
+result_dicts = []
 for method, args in method_args.items():
-    print(f"Method: {method}")
-    chunks = chunk_document(method=method, document=document, pages=pages, **args)
+    for optim_method in [None, "hypothetical_document", "decomposing", "paraphrasing", "stepback"]:
+        if optim_method:
+            config.optimization_method = optim_method
+            config.use_original_query_only = False
+        else:
+            config.optimization_method = None
+            config.use_original_query_only = True
 
-    faiss_service = FaissService()
-    faiss_service.create_index(chunks)
+        subdict = {}
+        subdict["method"] = method
+        subdict["optim_method"] = str(optim_method)
+        subdict["config"] = config.model_dump()
 
-    stats = evaluate_source("Handbuch", faiss_service, text_only=text_only)
-    print(stats)
+        print(f"Method: {method}")
+        chunks = chunk_document(method=method, document=document, pages=pages, **args)
 
-    result_dict[method] = config.model_dump()
-    result_dict[method]["results"] = stats
+        faiss_service = FaissService()
+        faiss_service.create_index(chunks)
+
+        stats = evaluate_source("Handbuch", faiss_service, config.text_questions_only)
+        print(stats)
+
+        subdict["result"] = stats.to_dict()
+        result_dicts.append(subdict)
 
 
 output_file = f"retrieval_eval_{int(time.time())}.json"
 output_path = os.path.join(settings.results_path, output_file)
 with open(output_path, "w") as file:
-    json.dump(result_dict, file, indent=4)
+    json.dump(result_dicts, file, indent=4)
 
 print("Results are saved in: ", output_path)
