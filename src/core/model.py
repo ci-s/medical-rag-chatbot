@@ -34,7 +34,7 @@ def create_user_question_prompt(vignette: Vignette, question: Question) -> str:
 def create_question_prompt_w_docs(retrieved_documents, vignette: Vignette, question: Question) -> str:
     documents_str = "".join([f"{document}\n" for document in retrieved_documents])
 
-    user_prompt = create_user_question_prompt(vignette, question.get_question())
+    user_prompt = create_user_question_prompt(vignette, question)
 
     user_prompt = QUESTION_PROMPT.format(
         retrieved_documents=documents_str,
@@ -42,7 +42,7 @@ def create_question_prompt_w_docs(retrieved_documents, vignette: Vignette, quest
     )
     prompt, replaced_count = replace_abbreviations(user_prompt)
 
-    print("Prompt:", prompt)  # TODO: Some logging for experimenting
+    # print("Prompt:", prompt)  # TODO: Some logging for experimenting
     print(f"Number of abbreviations replaced: {replaced_count}")
     return prompt
 
@@ -123,18 +123,34 @@ def generate_response(user_prompt: str, system_prompt: str = None) -> str:
         else:
             raise ValueError("Invalid inference type")
     elif config.inference_location == "remote":
-        url = "http://localhost:8082/generate"
+        url = "http://localhost:8083/generate"
         headers = {"Content-Type": "application/json"}
 
         formatted_prompt = format_prompt(prompt_format, user_prompt, system_prompt, first=True)
         data = {"prompt": formatted_prompt, "max_new_tokens": config.max_new_tokens}
         response = requests.post(url, headers=headers, data=json.dumps(data))
+        response_text = response.text.encode("utf-8").decode("utf-8").strip()
         try:
-            parsed_response = response.json()  # Automatically parses JSON
-            # Check if the parsed response contains another JSON-encoded string
+            parsed_response = json.loads(response_text)  # Parse JSON
             if isinstance(parsed_response, str):
-                return json.loads(parsed_response)  # Parse inner JSON
+                print("Response is double encoded JSON")
+                return json.loads(parsed_response)  # Handle double-encoded JSON
             return parsed_response
         except json.JSONDecodeError:
-            # If the response isn't valid JSON, return raw text
-            return response.text
+            print("Failed to parse response as JSON")
+            return response_text
+        # try:
+        # print("will try to parse response: ", response)
+        # parsed_response = response.json()  # Automatically parses JSON
+
+        # print("parsed response: ", parsed_response)
+        # # Check if the parsed response contains another JSON-encoded string
+        # if isinstance(parsed_response, str):
+        #     print("Response is a string")
+        #     return json.loads(parsed_response.strip())  # Parse inner JSON
+        # return parsed_response
+
+        # except json.JSONDecodeError:
+        #     # If the response isn't valid JSON, return raw text
+        #     print("Failed to parse response as JSON in generate_response")
+        #     return response.text.strip()

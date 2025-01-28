@@ -6,6 +6,7 @@ from core.embedding import embed_chunks
 from settings.settings import config
 from core.utils import replace_abbreviations
 from domain.vignette import Vignette, Question
+from domain.document import Chunk
 from core.model import create_user_question_prompt, generate_response
 from prompts import HYPOTHETICAL_DOCUMENT_PROMPT, STEPBACK_PROMPT, DECOMPOSING_PROMPT, PARAPHRASING_PROMPT
 
@@ -30,7 +31,7 @@ class FaissService:
         self.index = index
         self.chunks = chunks
 
-    def search_index(self, query, k):
+    def search_index(self, query, k) -> tuple[list[float], list[Chunk]]:
         if isinstance(query, str):
             query_embedding = self._encode_chunks([query])
         else:
@@ -41,16 +42,16 @@ class FaissService:
         return D[0], [self.chunks[idx] for idx in I[0]]
 
 
-def _retrieve(query: str, faiss_service: FaissService) -> list[str]:
+def _retrieve(query: str, faiss_service: FaissService) -> list[Chunk]:
     query, _ = replace_abbreviations(query)
     query_embedding = embed_chunks(query, task_type="search_query")
 
     similarities, retrieved_documents = faiss_service.search_index(query_embedding, config.top_k)
 
-    print("Retrieved documents:")
-    for i, retrieved_document in enumerate(retrieved_documents):
-        print("*" * 20, f"Retrieval {i + 1} with similarity score {similarities[i]}", "*" * 20)
-        print(retrieved_document)
+    # print("Retrieved documents:")
+    # for i, retrieved_document in enumerate(retrieved_documents):
+    #     print("*" * 20, f"Retrieval {i + 1} with similarity score {similarities[i]}", "*" * 20)
+    #     print(retrieved_document)
 
     return retrieved_documents
 
@@ -100,7 +101,7 @@ def get_optimization_prompt() -> str:
         raise ValueError("Invalid optimization method")
 
 
-def retrieve_and_rank(queries: list[str], faiss_service: FaissService):
+def _retrieve_and_rank(queries: list[str], faiss_service: FaissService) -> list[Chunk]:
     # Current implementation returns top k documents with the highest scores from all queries
     # Not exactly sure if this is the best way to combine results from multiple queries
     # Because of the length of the queries, does it make sense to compare scores?
@@ -121,7 +122,7 @@ def retrieve(
     vignette: Vignette,
     question: Question,
     faiss_service: FaissService,
-) -> tuple[str, str]:
+) -> list[Chunk]:
     if config.use_original_query_only:
         print("Using original query only")
         return _retrieve(question.get_question(), faiss_service)
@@ -131,12 +132,12 @@ def retrieve(
     system_prompt = get_optimization_prompt()
     user_prompt = create_user_question_prompt(vignette, question)
     response = generate_response(user_prompt, system_prompt)
-    print("Response:", response)
+    # print("Response:", response)
     new_query = parse_optimized_query(response)
-    print("New query:", new_query)
+    # print("New query:", new_query)
     # add parser because decompose will return two queries
     if isinstance(new_query, list):
-        retrieved_documents = retrieve_and_rank(new_query, faiss_service)
+        retrieved_documents = _retrieve_and_rank(new_query, faiss_service)
     else:
         retrieved_documents = _retrieve(new_query, faiss_service)
 

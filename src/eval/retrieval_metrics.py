@@ -11,12 +11,12 @@ def does_retrieved_passage_overlap(retrieved_passage: Chunk, reference_pages: li
     )
 
 
-def recall(retrieved_passages: list[Chunk], reference_pages: list[int]) -> Stats | None:
+def recall(retrieved_passages: list[Chunk], reference_pages: list[int]) -> Stats:
     matched_reference_pages = set()  # To avoid double-counting matched reference pages
     total_reference_count = len(reference_pages)
 
     if total_reference_count == 0:
-        return None
+        raise ValueError("Reference pages cannot be empty")
 
     for retrieved_passage in retrieved_passages:
         for reference_page in reference_pages:
@@ -24,7 +24,7 @@ def recall(retrieved_passages: list[Chunk], reference_pages: list[int]) -> Stats
                 matched_reference_pages.add(reference_page)
 
     covered_reference_count = len(matched_reference_pages)
-    return Stats(pct=covered_reference_count / total_reference_count, total=total_reference_count)
+    return covered_reference_count / total_reference_count
 
 
 def precision(retrieved_passages: list[Chunk], reference_pages: list[int]) -> Stats | None:
@@ -38,7 +38,7 @@ def precision(retrieved_passages: list[Chunk], reference_pages: list[int]) -> St
         if does_retrieved_passage_overlap(retrieved_passage, reference_pages):
             relevant_retrieved_count += 1
 
-    return Stats(pct=relevant_retrieved_count / total_retrieved_count, total=total_retrieved_count)
+    return relevant_retrieved_count / total_retrieved_count
 
 
 def context_relevance(
@@ -55,14 +55,7 @@ def context_relevance(
             "relevant_sentences": ["Albert Einstein was a German-born theoretical physicist.", "He was born in Germany in 1879."],
             "irrelevant_sentences": ["He developed the theory of relativity, one of the two pillars of modern physics."]
             }
-        
-        Context: The smartphone released in 2023 has features beyond what we currently know. It introduces groundbreaking battery technology.
-        Question: What groundbreaking feature did the 2023 smartphone introduce?
-        {
-            "relevant_sentences": ["It introduces groundbreaking battery technology."],
-            "irrelevant_sentences": ["The smartphone released in 2023 has features beyond what we currently know."]
-            }
-        
+
         Context: The sky is blue due to the scattering of sunlight by the atmosphere. The scattering is more effective at short wavelengths, which is why the sky appears blue.
         Question: Why is the sky blue?
         {
@@ -95,5 +88,6 @@ def context_relevance(
     return ContextRelevanceResult(
         relevant_sentences=relevant_sentences,
         irrelevant_sentences=irrelevant_sentences,
+        question_id=question.get_id(),
         score=score,
     )

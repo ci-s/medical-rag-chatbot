@@ -21,24 +21,18 @@ def get_references(query: str) -> list[int]:
                 return question.get_reference()
 
 
-def evaluate_single(query: str, retrieved_passages: list[Chunk]) -> Stats | None:
+def evaluate_single(query: str, retrieved_passages: list[Chunk]) -> Stats:
     reference_pages = get_references(query)
-    print("Reference pages are: ", reference_pages)
-    print(
-        "Retrieved pages are: ",
-        [
-            str(retrieved_passage.start_page) + "-" + str(retrieved_passage.end_page)
-            for retrieved_passage in retrieved_passages
-        ],
+    return Stats(
+        recall=recall(retrieved_passages, reference_pages), precision=precision(retrieved_passages, reference_pages)
     )
-    return recall(retrieved_passages, reference_pages)
 
 
 def evaluate_source(
     source: Literal["Handbuch", "Antibiotika"],
     faiss_service: FaissService,
     text_only: bool = False,
-) -> int:
+) -> Stats:
     all_stats = []
 
     for vignette in VIGNETTE_COLLECTION.get_vignettes():
@@ -56,5 +50,8 @@ def evaluate_source(
                 pass
 
     print(f"Questions from {source}: {len([all_stats for s in all_stats if s is not None])}")
-
-    return mean([stat.pct for stat in all_stats if stat is not None])
+    print("All stats: ", all_stats)
+    return Stats(
+        recall=mean([stat.recall for stat in all_stats if stat is not None]),
+        precision=mean([stat.precision for stat in all_stats if stat is not None]),
+    )

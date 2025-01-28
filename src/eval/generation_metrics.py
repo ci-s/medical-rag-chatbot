@@ -27,7 +27,7 @@ def llm_as_a_judge(
     eval_result = generate_response(eval_prompt)
     if not isinstance(eval_result, dict):
         raise TypeError(f"Expected eval_result to be a dictionary after parsing. Got -> {eval_result}")
-    return Feedback(eval_result["explanation"], eval_result["score"])
+    return Feedback(question.get_id(), eval_result["feedback"], eval_result["score"])
 
 
 def extract_statements_from_answer(vignette: Vignette, question: Question, generated_answer: str) -> list[str]:
@@ -94,8 +94,6 @@ def faithfulness(
     statements = extract_statements_from_answer(vignette, question, generated_answer)
     system_prompt = """
     Consider the given context and following statements, then determine whether they are supported by the information present in the related information or background. Provide a brief explanation for each statement before arriving at the verdict (yes/no). Provide a final verdict for each statement in order at the end in the given format. Do not deviate from the specified format.
-    
-    Consider the given context and following statements, then determine whether they are supported by the information present in the related information or background. Provide a brief explanation for each statement before arriving at the verdict (yes/no). Provide a final verdict for each statement in order at the end in the given format. Do not deviate from the specified format.
 
     Example:
     Related information:
@@ -107,7 +105,7 @@ def faithfulness(
     A zoo exhibit is being designed to educate visitors about animal habitats and diets, focusing on Asian carnivores and their roles in ecosystems.
 
     Statements:
-    1. "Tigers are herbivores."
+    1. "Tigers are herbivores and selected because they are fround in Asia."
     2. "The Earth takes about 365 days to orbit the Sun."
     3. "Cheese is a natural food source for tigers in the wild."
 
@@ -149,6 +147,7 @@ def faithfulness(
         statements=statements,
         explanations=[result["explanation"] for result in results],
         verdicts=[result["verdict"] for result in results],
+        question_id=question.get_id(),
         score=faithfulness_score,
         feedback="",
     )
@@ -164,55 +163,75 @@ def calculate_similarity(question: str, generated_questions: list[str]):
 def answer_relevance(
     vignette: Vignette, question: Question, generated_answer: str, retrieved_documents: list[Chunk]
 ) -> AnswerRelevanceResult:
-    # TODO: Try with background too
-    # TODO: Every question is the same because of the seed. What to do?
-    strictness = 1  # TODO: Move to config
+    # system_prompt = """
+    #     Generate 3 different questions for the given answer and the background and identify if answer is noncommittal. Give noncommittal as 1 if the answer is noncommittal and 0 if the answer is committal. A noncommittal answer is one that is evasive, vague, or ambiguous. For example, "I don't know" or "I'm not sure" are noncommittal answers. Do not deviate from the specified format.
+
+    #     ## Examples
+    #     Background:
+
+    #     Answer: Albert Einstein was born in Germany.
+    #     {
+    #         "questions": ["Where was Albert Einstein born?", "What is the birthplace of Albert Einstein?", "In which country was Albert Einstein born?"],
+    #         "noncommittal": 0
+    #     }
+
+    #     Answer: I don't know about the  groundbreaking feature of the smartphone invented in 2023 as am unaware of information beyond 2022.
+    #     {
+    #         "questions": ["What was the groundbreaking feature of the smartphone invented in 2023?", "In 2023, which groundbreaking feature of the smartphone was invented?", "What kind of groundbreaking feature was invented in 2023 for smartphones?"],
+    #         "noncommittal": 1
+    #     }
+    #     Do not say anything else. Make sure the response is a valid JSON.
+    # """
 
     system_prompt = """
-        Generate a question for the given answer and identify if answer is noncommittal. Give noncommittal as 1 if the answer is noncommittal and 0 if the answer is committal. A noncommittal answer is one that is evasive, vague, or ambiguous. For example, "I don't know" or "I'm not sure" are noncommittal answers. Do not deviate from the specified format.
+        Generate 3 different questions for the given answer and the background and identify if answer is noncommittal. Give noncommittal as 1 if the answer is noncommittal and 0 if the answer is committal. A noncommittal answer is one that is evasive, vague, or ambiguous. For example, "I don't know" or "I'm not sure" are noncommittal answers. Do not deviate from the specified format.
         
         ## Examples
-        Answer: Albert Einstein was born in Germany.
+        Background:
+        Es erfolgt die Vorstellung eines 72-jährigen Patienten unter dem Verdacht auf einen Schlaganfall. Der Patient wurde etwa 1 Stunde vor der Aufnahme von seiner Ehefrau bewusstlos auf dem Boden gefunden. Bei der Anamnese berichtet die Ehefrau, dass der Patient seit mehreren Jahren an Vorhofflimmern leidet und mit Apixaban behandelt wird. In der körperlichen Untersuchung zeigt der Patient eine vollständige Hemiparese der rechten Körperhälfte und eine globale Aphasie. Der Blutdruck liegt bei 200/100, die Herzfrequenz ist unregelmäßig bei 110/min.
+        Eine cCT-Bildgebung zeigt einen frühzeitigen Verschluss der linken A. cerebri media, ohne Hinweise auf eine intrakranielle Blutung. Ein Notfalllabor ergibt einen INR von 2,0, eine aPTT von 35 und Thrombozyten von 150.000/µl. Die Blutzuckerwerte liegen bei 140 mg/dl.
+        
+        Answer: Die Empfehlung ist eine sofortige intravenöse Thrombolyse mit Alteplase, falls keine Kontraindikationen vorliegen, und eine mechanische Thrombektomie aufgrund des Verschlusses der A. cerebri media.
         {
-            "question": "Where was Albert Einstein born?",
+            "questions": ["Welche therapeutische Maßnahme sollte zur Wiederherstellung der Durchblutung in diesem Fall erfolgen?", 
+                "Welche Behandlung ist erforderlich, um die Durchblutung in diesem Fall wiederherzustellen?", 
+                "Welche Therapieoptionen kommen zur Wiederherstellung der zerebralen Durchblutung in Betracht?"],
             "noncommittal": 0
         }
 
-        Answer: I don't know about the  groundbreaking feature of the smartphone invented in 2023 as am unaware of information beyond 2022.
-        {
-            "question": "What was the groundbreaking feature of the smartphone invented in 2023?",
-            "noncommittal": 1
-        }
         Do not say anything else. Make sure the response is a valid JSON.
     """
 
     user_prompt = f"""
+        Background: {vignette.get_background()}
+        
         Answer: {generated_answer}
     """
 
     generated_questions = []
-    noncommittals = []
 
-    for _ in range(strictness):
-        response = generate_response(system_prompt, user_prompt)
-        print("Response within answer_relevance: ", response)
-        try:
-            generated_questions.append(response["question"])
-            noncommittals.append(response["noncommittal"])
-        except Exception as e:
-            print("Question or noncommittal key not found in response or bad parsing:", e)
-            raise e
+    response = generate_response(system_prompt, user_prompt)
+    print("Response within answer_relevance: ", response)
+    try:
+        generated_questions.extend(response["questions"])
+        is_noncommittal = bool(response["noncommittal"])
+    except Exception as e:
+        print("Question or noncommittal key not found in response or bad parsing:", e)
+        raise e
 
     cosine_sim = calculate_similarity(question.get_question(), generated_questions)
-    is_any_noncommittal = np.any(noncommittals)
-    score = cosine_sim.mean() * int(not is_any_noncommittal)
+    if is_noncommittal:
+        score = 0
+    else:
+        score = cosine_sim.mean()
 
-    feedback_text = f"Generated questions: {generated_questions}, Noncommittals: {noncommittals}"
+    feedback_text = f"Generated questions: {generated_questions}, Noncommittal: {is_noncommittal}"
 
     return AnswerRelevanceResult(
         answer=generated_answer,
         generated_questions=generated_questions,
-        noncommittals=noncommittals,
+        noncommittal=is_noncommittal,
+        question_id=question.get_id(),
         score=score,
         feedback=feedback_text,
     )

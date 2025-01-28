@@ -55,3 +55,10 @@ class Chunk:
 
     def __str__(self) -> str:
         return f"Chunk from page {self.start_page} to {self.end_page}: {self.text[:150]}..."
+
+    def to_dict(self):
+        return {
+            "text": self.text,
+            "start_page": self.start_page,
+            "end_page": self.end_page,
+        }
