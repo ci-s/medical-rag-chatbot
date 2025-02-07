@@ -17,10 +17,10 @@ class RAGASResult:
         question_id: int,
         retrieved_documents: list[Chunk],
         generated_answer: str,
-        llm_as_a_judge_param: Feedback,
-        faithfulness_param: Feedback,
-        answer_relevance_param: Feedback,
-        context_relevance_param: Feedback,
+        llm_as_a_judge_param: Feedback | None,
+        faithfulness_param: Feedback | None,
+        answer_relevance_param: Feedback | None,
+        context_relevance_param: Feedback | None,
     ):
         self.question_id = question_id
         self.retrieved_documents = retrieved_documents
@@ -35,10 +35,10 @@ class RAGASResult:
             "question_id": self.question_id,
             "retrieved_documents": [doc.to_dict() for doc in self.retrieved_documents],
             "generated_answer": self.generated_answer,
-            "llm_as_judge": self.llm_as_judge.to_dict(),
-            "faithfulness": self.faithfulness.to_dict(),
-            "answer_relevance": self.answer_relevance.to_dict(),
-            "context_relevance": self.context_relevance.to_dict(),
+            "llm_as_judge": self.llm_as_judge.to_dict() if self.llm_as_judge else None,
+            "faithfulness": self.faithfulness.to_dict() if self.faithfulness else None,
+            "answer_relevance": self.answer_relevance.to_dict() if self.answer_relevance else None,
+            "context_relevance": self.context_relevance.to_dict() if self.context_relevance else None,
         }
 
 
@@ -118,10 +118,37 @@ def evaluate_single_w_ragas(
         retrieved_documents,
         generated_answer,
         llm_as_a_judge(vignette, question, generated_answer, retrieved_documents),
+        # None,
         faithfulness(vignette, question, generated_answer, retrieved_documents),
         answer_relevance(vignette, question, generated_answer, retrieved_documents),
         context_relevance(vignette, question, generated_answer, retrieved_documents),
+        # None,
+        # None,
     )
+
+
+def compute_average_scores(all_feedbacks: list[RAGASResult], score_keys: list[str]) -> dict:
+    """
+    Computes average scores for given score keys in all_feedbacks.
+
+    Parameters:
+        all_feedbacks (list): List of feedback objects containing different score categories.
+        score_keys (list): List of score keys to compute averages for.
+
+    Returns:
+        dict: Dictionary with average scores for each key.
+    """
+    avg_scores = {}
+
+    for key in score_keys:
+        scores = [
+            float(getattr(ragas_result, key).score)
+            for ragas_result in all_feedbacks
+            if getattr(ragas_result, key) is not None
+        ]
+        avg_scores[key] = mean(scores) if scores else 0.0  # Avoid StatisticsError
+
+    return avg_scores
 
 
 def evaluate_ragas(
@@ -144,39 +171,9 @@ def evaluate_ragas(
 
     print(f"Questions from {source}: {len([all_feedbacks for s in all_feedbacks if s is not None])}")
 
-    avg_scores = {}
-    try:
-        avg_scores["llm_as_judge"] = mean(
-            [
-                float(ragas_result.llm_as_judge.score)
-                for ragas_result in all_feedbacks
-                if ragas_result.llm_as_judge.score is not None
-            ]
-        )
-        avg_scores["faithfulness"] = mean(
-            [
-                float(ragas_result.faithfulness.score)
-                for ragas_result in all_feedbacks
-                if ragas_result.faithfulness.score is not None
-            ]
-        )
-        avg_scores["answer_relevance"] = mean(
-            [
-                float(ragas_result.answer_relevance.score)
-                for ragas_result in all_feedbacks
-                if ragas_result.answer_relevance.score is not None
-            ]
-        )
-        avg_scores["context_relevance"] = mean(
-            [
-                float(ragas_result.context_relevance.score)
-                for ragas_result in all_feedbacks
-                if ragas_result.context_relevance.score is not None
-            ]
-        )
-    except:
-        print("Trouble calculating average scores")
-        avg_scores = 0
+    score_keys = ["llm_as_judge", "faithfulness", "answer_relevance", "context_relevance"]
+    avg_scores = compute_average_scores(all_feedbacks, score_keys)
+    print("Trouble calculating average scores")
     # Add validation to score for integer between 1 and 5
     return avg_scores, all_feedbacks
 
@@ -197,38 +194,7 @@ def evaluate_ragas_qids(
 
     print(f"Questions from {source}: {len([all_feedbacks for s in all_feedbacks if s is not None])}")
 
-    avg_scores = {}
-    try:
-        avg_scores["llm_as_judge"] = mean(
-            [
-                float(ragas_result.llm_as_judge.score)
-                for ragas_result in all_feedbacks
-                if ragas_result.llm_as_judge.score is not None
-            ]
-        )
-        avg_scores["faithfulness"] = mean(
-            [
-                float(ragas_result.faithfulness.score)
-                for ragas_result in all_feedbacks
-                if ragas_result.faithfulness.score is not None
-            ]
-        )
-        avg_scores["answer_relevance"] = mean(
-            [
-                float(ragas_result.answer_relevance.score)
-                for ragas_result in all_feedbacks
-                if ragas_result.answer_relevance.score is not None
-            ]
-        )
-        avg_scores["context_relevance"] = mean(
-            [
-                float(ragas_result.context_relevance.score)
-                for ragas_result in all_feedbacks
-                if ragas_result.context_relevance.score is not None
-            ]
-        )
-    except:
-        print("Trouble calculating average scores")
-        avg_scores = 0
+    score_keys = ["llm_as_judge", "faithfulness", "answer_relevance", "context_relevance"]
+    avg_scores = compute_average_scores(all_feedbacks, score_keys)
     # Add validation to score for integer between 1 and 5
     return avg_scores, all_feedbacks

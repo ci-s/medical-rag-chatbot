@@ -99,22 +99,27 @@ def faithfulness(
     Related information:
     The Earth revolves around the Sun and completes one full orbit in approximately 365.25 days.
     Cheese is a dairy product made by curdling milk using bacteria or enzymes.
-    Tigers are carnivorous animals primarily found in Asia, known for their distinctive orange and black stripes.
+    Tigers are carnivorous animals, known for their distinctive orange and black stripes.
 
     Background: 
     A zoo exhibit is being designed to educate visitors about animal habitats and diets, focusing on Asian carnivores and their roles in ecosystems.
 
+    Question:
+    Because tigers are primarily found in Asia, they are considered for the exhibit. Is there anything that would make them unsuitable?
+    
     Statements:
-    1. "Tigers are herbivores and selected because they are fround in Asia."
+    1. "Tigers are herbivores."
     2. "The Earth takes about 365 days to orbit the Sun."
     3. "Cheese is a natural food source for tigers in the wild."
+    4. "Tigers often exist in Asia."
 
     Output:
     {
         "results": [
             {"statement": "Tigers are herbivores.", "verdict": "no", "explanation": "The related information explicitly states that tigers are carnivorous animals."},
             {"statement": "The Earth takes about 365 days to orbit the Sun.", "verdict": "yes", "explanation": "The related information confirms that the Earth completes an orbit in approximately 365.25 days."},
-            {"statement": "Cheese is a natural food source for tigers in the wild.", "verdict": "no", "explanation": "There is no evidence that it is a food source for tigers."}
+            {"statement": "Cheese is a natural food source for tigers in the wild.", "verdict": "no", "explanation": "There is no evidence that it is a food source for tigers."},
+            {"statement": "Tigers often exist in Asia.", "verdict": "yes", "explanation": "The question itself mentions that tigers are primarily found in Asia."}
         ]
     }
     
@@ -123,6 +128,7 @@ def faithfulness(
     user_prompt = f"""
     Related information: {"\n".join([retrieved_doc.text for retrieved_doc in retrieved_documents])}
     Background:{vignette.get_background()}
+    Question: {question.get_question()}
     Statements:\n{"\n".join(["Statement: " + statement for statement in statements])}
     """
     print("USer prompt: " + user_prompt)
