@@ -37,16 +37,15 @@ if text_only:
 else:
     questions = "all"
 
-# f = evaluate_single(
-#     vignette_id=0,
-#     question_id=1,
-#     faiss_service=faiss_service,
-# )
-# f.to_dict()
 
-# avg_score, all_feedbacks = evaluate_source("Handbuch", faiss_service, text_only=text_only)
 result_dicts = []
-for optim_method in ["stepback"]:  # None, "hypothetical_document", "decomposing", "paraphrasing",
+for optim_method in [
+    None,
+    "hypothetical_document",
+    "decomposing",
+    "paraphrasing",
+    "stepback",
+]:  # None, "hypothetical_document", "decomposing", "paraphrasing", "stepback"
     if optim_method:
         config.optimization_method = optim_method
         config.use_original_query_only = False
@@ -56,6 +55,7 @@ for optim_method in ["stepback"]:  # None, "hypothetical_document", "decomposing
 
     avg_score, all_feedbacks = evaluate_ragas("Handbuch", faiss_service, text_only=text_only)
 
+    tim = int(time.time())
     # scores = []
     # for feedback in all_feedbacks:
     #     scores.append(float(feedback.score))
@@ -69,10 +69,9 @@ for optim_method in ["stepback"]:  # None, "hypothetical_document", "decomposing
         "avg_score": avg_score,
         # "std_dev": std_dev,
         # "counted_values": counted_values,
-        # "metric": "faithfulness",
     }
 
-    output_file = f"generation_eval_intermediate_{str(optim_method)}_{int(time.time())}.json"
+    output_file = f"generation_eval_{tim}_{config.experiment_name}_{str(optim_method)}.json"
     output_path = os.path.join(settings.results_path, output_file)
     with open(output_path, "w") as file:
         json.dump(result_dict, file, indent=4)
@@ -80,7 +79,7 @@ for optim_method in ["stepback"]:  # None, "hypothetical_document", "decomposing
     result_dicts.append(result_dict)
 
 
-output_file = f"generation_eval_{int(time.time())}.json"
+output_file = f"generation_eval_{tim}.json"
 output_path = os.path.join(settings.results_path, output_file)
 with open(output_path, "w") as file:
     json.dump(result_dicts, file, indent=4)

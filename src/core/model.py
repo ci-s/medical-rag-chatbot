@@ -177,7 +177,6 @@ def generate_response(user_prompt: str, system_prompt: str = None) -> str:
         try:
             parsed_response = json.loads(response_text)  # Parse JSON
             if isinstance(parsed_response, str):
-                print("Response is double encoded JSON")
                 return json.loads(parsed_response.strip())  # Handle double-encoded JSON
             return parsed_response
         except json.JSONDecodeError:
