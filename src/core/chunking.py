@@ -88,14 +88,20 @@ def get_headings(document: Document) -> list[str]:
 def build_heading_hierarchy(headings: list[str]) -> dict[str, str]:
     """
     Constructs a hierarchy of headings such that each heading includes its parent headings.
+    Handles inconsistent separator formatting.
     """
     hierarchy = {}
     current_path = []
 
     for heading in headings:
-        number, title = heading.split(". ", 1)
+        match = re.match(r"(\d+(?:\.\d+)*)\s*(.*)", heading)
+        if not match:
+            continue  # Skip invalid headings
+
+        number, title = match.groups()
         levels = number.split(".")
 
+        # Adjust the current path to match the heading level
         while len(current_path) > len(levels):
             current_path.pop()
         current_path = current_path[: len(levels) - 1]
@@ -159,10 +165,15 @@ def chunk_by_section(
     """
     Splits a document into chunks based on its sections and headings hierarchy.
     """
-    headings = get_headings(toc)
-    print("Extracted headings:\n")
-    for heading in headings:
-        print("\n" + heading)
+    # headings = get_headings(toc)
+    # print("Extracted headings:\n")
+    # for heading in headings:
+    #     print("\n" + heading)
+    with open(
+        "/Users/cisemaltan/workspace/thesis/medical-rag-chatbot/data/headings.json", "r", encoding="utf-8"
+    ) as file:
+        data = json.load(file)
+    headings = data["headings"]
 
     hierarchy = build_heading_hierarchy(headings)
     document_str = merge_document(document, pages=pages)

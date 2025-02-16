@@ -3,12 +3,14 @@ from typing import Literal
 import json
 
 from services.retrieval import FaissService, retrieve
-from core.model import generate_response, create_question_prompt_w_docs
+from core.model import generate_response
+from core.question_answering import create_question_prompt_w_docs
 from domain.evaluation import Feedback
 from domain.document import Chunk
 from settings import VIGNETTE_COLLECTION
 from .generation_metrics import llm_as_a_judge, faithfulness, answer_relevance
 from .retrieval_metrics import context_relevance
+from parsing import Answer, parse_with_retry
 
 
 class RAGASResult:
@@ -57,12 +59,12 @@ def evaluate_single(
     question = vignette.get_question(question_id)
 
     retrieved_documents = retrieve(vignette, question, faiss_service)
-    user_prompt = create_question_prompt_w_docs(retrieved_documents, vignette, question)
+    system_prompt, user_prompt = create_question_prompt_w_docs(retrieved_documents, vignette, question)
 
-    generated_answer = generate_response(user_prompt)
+    generated_answer = generate_response(system_prompt, user_prompt)
+    generated_answer = parse_with_retry(Answer, generated_answer)
 
-    return llm_as_a_judge(vignette, question, generated_answer, retrieved_documents)
-    # return faithfulness(vignette, question, generated_answer, retrieved_documents)
+    return llm_as_a_judge(vignette, question, generated_answer.answer, retrieved_documents)
 
 
 def evaluate_source(
@@ -87,8 +89,8 @@ def evaluate_source(
 
     try:
         avg_score = mean([float(feedback.score) for feedback in all_feedbacks if feedback.score is not None])
-    except:
-        print("Trouble calculating average score")
+    except Exception as e:
+        print("Trouble calculating average score: ", e)
         avg_score = 0
     # Add validation to score for integer between 1 and 5
     return avg_score, all_feedbacks
@@ -109,21 +111,22 @@ def evaluate_single_w_ragas(
     question = vignette.get_question(question_id)
 
     retrieved_documents = retrieve(vignette, question, faiss_service)
-    user_prompt = create_question_prompt_w_docs(retrieved_documents, vignette, question)
+    system_prompt, user_prompt = create_question_prompt_w_docs(retrieved_documents, vignette, question)
 
-    generated_answer = generate_response(user_prompt)
+    generated_answer = generate_response(system_prompt, user_prompt)
+    generated_answer = parse_with_retry(Answer, generated_answer)
 
     return RAGASResult(
         question_id,
         retrieved_documents,
         generated_answer,
         llm_as_a_judge(vignette, question, generated_answer, retrieved_documents),
-        # None,
-        faithfulness(vignette, question, generated_answer, retrieved_documents),
-        answer_relevance(vignette, question, generated_answer, retrieved_documents),
-        context_relevance(vignette, question, generated_answer, retrieved_documents),
-        # None,
-        # None,
+        # faithfulness(vignette, question, generated_answer, retrieved_documents),
+        # answer_relevance(vignette, question, generated_answer, retrieved_documents),
+        # context_relevance(vignette, question, generated_answer, retrieved_documents),
+        None,
+        None,
+        None,
     )
 
 

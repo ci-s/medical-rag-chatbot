@@ -19,32 +19,25 @@ from eval.generation import evaluate_single, evaluate_source, evaluate_ragas
 
 file_path = os.path.join(settings.data_path, settings.file_name)
 
-pages, _, _, _ = get_page_types()
+if config.text_questions_only:
+    pages, _, _, _ = get_page_types()
+else:
+    pages = list(range(7, 109))
 print(f"Number of pages: {len(pages)}")
-# toc_pages=[2,3]
+toc_pages = [2, 3]
 
 document = get_document(file_path, pages)
 # toc = get_document(file_path, toc_pages)
 chunks = chunk_document(method="size", document=document, pages=pages, chunk_size=512)
 
+
 faiss_service = FaissService()
 faiss_service.create_index(chunks)
-
-
-text_only = True
-if text_only:
-    questions = "text-only"
-else:
-    questions = "all"
 
 
 result_dicts = []
 for optim_method in [
     None,
-    "hypothetical_document",
-    "decomposing",
-    "paraphrasing",
-    "stepback",
 ]:  # None, "hypothetical_document", "decomposing", "paraphrasing", "stepback"
     if optim_method:
         config.optimization_method = optim_method
@@ -53,8 +46,8 @@ for optim_method in [
         config.optimization_method = None
         config.use_original_query_only = True
 
-    avg_score, all_feedbacks = evaluate_ragas("Handbuch", faiss_service, text_only=text_only)
-
+    # avg_score, all_feedbacks = evaluate_ragas("Handbuch", faiss_service, text_only=text_only)
+    avg_score, all_feedbacks = evaluate_source("Handbuch", faiss_service, text_only=config.text_questions_only)
     tim = int(time.time())
     # scores = []
     # for feedback in all_feedbacks:
@@ -71,10 +64,10 @@ for optim_method in [
         # "counted_values": counted_values,
     }
 
-    output_file = f"generation_eval_{tim}_{config.experiment_name}_{str(optim_method)}.json"
-    output_path = os.path.join(settings.results_path, output_file)
-    with open(output_path, "w") as file:
-        json.dump(result_dict, file, indent=4)
+    # output_file = f"generation_eval_{tim}_{config.experiment_name}_{str(optim_method)}.json"
+    # output_path = os.path.join(settings.results_path, output_file)
+    # with open(output_path, "w") as file:
+    #     json.dump(result_dict, file, indent=4)
 
     result_dicts.append(result_dict)
 
