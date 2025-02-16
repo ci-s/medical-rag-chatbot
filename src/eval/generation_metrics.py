@@ -6,7 +6,13 @@ from domain.evaluation import Feedback, StatementResult, AnswerRelevanceResult
 from core.model import generate_response
 from core.embedding import embed_chunks
 from prompts import GENERATION_EVALUATION_PROMPT
-
+from parsing import (
+    Feedback as Feedback_Parsing,
+    Statements,
+    ResultsResponse,
+    AnswerRelevanceResultResponse,
+    parse_with_retry,
+)
 import numpy as np
 
 
@@ -15,8 +21,8 @@ def llm_as_a_judge(
 ) -> Feedback:
     eval_prompt = GENERATION_EVALUATION_PROMPT.format(
         instruction=f"""        
-            Related information:\n{"".join([f"{docu}\n" for docu in retrieved_documents])}
-                    
+            Related information:\n{"".join([f"{docu.text}\n" for docu in retrieved_documents])}
+
             Background:\n{vignette.background}
             Question:\n{question.get_question()}
             """,
@@ -25,9 +31,13 @@ def llm_as_a_judge(
     )
 
     eval_result = generate_response(eval_prompt)
-    if not isinstance(eval_result, dict):
-        raise TypeError(f"Expected eval_result to be a dictionary after parsing. Got -> {eval_result}")
-    return Feedback(question.get_id(), eval_result["feedback"], eval_result["score"])
+    try:
+        eval_result = parse_with_retry(Feedback_Parsing, eval_result)
+    except Exception as e:
+        print("Problematic parsing in llm as a judge:", e)
+        raise e
+
+    return Feedback(question.get_id(), eval_result.feedback, eval_result.score, generated_answer)
 
 
 def extract_statements_from_answer(vignette: Vignette, question: Question, generated_answer: str) -> list[str]:
@@ -75,17 +85,12 @@ def extract_statements_from_answer(vignette: Vignette, question: Question, gener
     Answer: {generated_answer}
     """
     response = generate_response(system_prompt, user_prompt)
-    print("Response aa: ", response)
-    if isinstance(response, str):
-        output = json.loads(response)
-        print("json loaded: ", output)
-    else:
-        output = response
-
-    if "statements" in output:
-        return output["statements"]
-    else:
-        raise ValueError("Missing 'statements' key in the response.")
+    try:
+        statements = parse_with_retry(Statements, response)
+        return statements.statements
+    except Exception as e:
+        print("Problematic parsing:", e)
+        raise e
 
 
 def faithfulness(
@@ -131,16 +136,15 @@ def faithfulness(
     Question: {question.get_question()}
     Statements:\n{"\n".join(["Statement: " + statement for statement in statements])}
     """
-    print("USer prompt: " + user_prompt)
     response = generate_response(system_prompt, user_prompt)
-    print("Evaluation response from LLM: ", response)
-
     try:
-        results = response.get("results", [])
-    except json.JSONDecodeError:
-        print("Failed to parse LLM response.")
+        result_response = parse_with_retry(ResultsResponse, response)
+        results = result_response.results
+    except Exception as e:
+        print("Problematic parsing:", e)
+        raise e
 
-    supported_statements = sum(1 for result in results if result["verdict"] == "yes")
+    supported_statements = sum(1 for result in results if result.verdict == "yes")
     total_statements = len(statements)
 
     if total_statements == 0:
@@ -151,11 +155,12 @@ def faithfulness(
 
     return StatementResult(
         statements=statements,
-        explanations=[result["explanation"] for result in results],
-        verdicts=[result["verdict"] for result in results],
+        explanations=[result.explanation for result in results],
+        verdicts=[result.verdict for result in results],
         question_id=question.get_id(),
         score=faithfulness_score,
         feedback="",
+        generated_answer=generated_answer,
     )
 
 
@@ -169,26 +174,6 @@ def calculate_similarity(question: str, generated_questions: list[str]):
 def answer_relevance(
     vignette: Vignette, question: Question, generated_answer: str, retrieved_documents: list[Chunk]
 ) -> AnswerRelevanceResult:
-    # system_prompt = """
-    #     Generate 3 different questions for the given answer and the background and identify if answer is noncommittal. Give noncommittal as 1 if the answer is noncommittal and 0 if the answer is committal. A noncommittal answer is one that is evasive, vague, or ambiguous. For example, "I don't know" or "I'm not sure" are noncommittal answers. Do not deviate from the specified format.
-
-    #     ## Examples
-    #     Background:
-
-    #     Answer: Albert Einstein was born in Germany.
-    #     {
-    #         "questions": ["Where was Albert Einstein born?", "What is the birthplace of Albert Einstein?", "In which country was Albert Einstein born?"],
-    #         "noncommittal": 0
-    #     }
-
-    #     Answer: I don't know about the  groundbreaking feature of the smartphone invented in 2023 as am unaware of information beyond 2022.
-    #     {
-    #         "questions": ["What was the groundbreaking feature of the smartphone invented in 2023?", "In 2023, which groundbreaking feature of the smartphone was invented?", "What kind of groundbreaking feature was invented in 2023 for smartphones?"],
-    #         "noncommittal": 1
-    #     }
-    #     Do not say anything else. Make sure the response is a valid JSON.
-    # """
-
     system_prompt = """
         Generate 3 different questions for the given answer and the background and identify if answer is noncommittal. Give noncommittal as 1 if the answer is noncommittal and 0 if the answer is committal. A noncommittal answer is one that is evasive, vague, or ambiguous. For example, "I don't know" or "I'm not sure" are noncommittal answers. Do not deviate from the specified format.
         
@@ -217,13 +202,14 @@ def answer_relevance(
     generated_questions = []
 
     response = generate_response(system_prompt, user_prompt)
-    print("Response within answer_relevance: ", response)
     try:
-        generated_questions.extend(response["questions"])
-        is_noncommittal = bool(response["noncommittal"])
+        response = parse_with_retry(AnswerRelevanceResultResponse, response)
     except Exception as e:
-        print("Question or noncommittal key not found in response or bad parsing:", e)
+        print("Bad parsing in answer_relevance:", e)
         raise e
+
+    generated_questions.extend(response.questions)
+    is_noncommittal = bool(response.noncommittal)
 
     cosine_sim = calculate_similarity(question.get_question(), generated_questions)
     if is_noncommittal:
@@ -240,4 +226,5 @@ def answer_relevance(
         question_id=question.get_id(),
         score=score,
         feedback=feedback_text,
+        generated_answer=generated_answer,
     )

@@ -2,6 +2,7 @@ from domain.vignette import Question, Vignette
 from domain.document import Chunk
 from domain.evaluation import Stats, ContextRelevanceResult
 from core.model import generate_response
+from parsing import parse_with_retry, ContextRelevanceResultResponse
 
 
 def does_retrieved_passage_overlap(retrieved_passage: Chunk, reference_pages: list[int]) -> bool:
@@ -69,15 +70,15 @@ def context_relevance(
     context = ". ".join([doc.text for doc in retrieved_documents])
     user_prompt = f"Context: {context}\nQuestion: {question.get_question()}"
 
-    response = generate_response(system_prompt, user_prompt)
-    print("Response within context_relevance: ", response)
-
+    response = generate_response(system_prompt, user_prompt, max_new_tokens=2048)
     try:
-        relevant_sentences = response["relevant_sentences"]
-        irrelevant_sentences = response["irrelevant_sentences"]
+        response = parse_with_retry(ContextRelevanceResultResponse, response)
     except Exception as e:
-        print("relevant_sentences or irrelevant_sentences key not found in response or bad parsing:", e)
+        print("Bad parsing in context relevance:", e)
         raise e
+
+    relevant_sentences = response.relevant_sentences
+    irrelevant_sentences = response.irrelevant_sentences
 
     relevant_sentence_count = len(relevant_sentences)
 
@@ -90,4 +91,5 @@ def context_relevance(
         irrelevant_sentences=irrelevant_sentences,
         question_id=question.get_id(),
         score=score,
+        generated_answer=generated_answer,
     )

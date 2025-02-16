@@ -57,6 +57,4 @@ def replace_abbreviations(text: str) -> Union[str, int]:
 
     result_text = pattern.sub(replacer, text)
 
-    print(f"Number of abbreviations replaced: {count}")
-
     return result_text, count
