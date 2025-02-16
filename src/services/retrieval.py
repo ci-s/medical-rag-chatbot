@@ -1,5 +1,3 @@
-from typing import Literal
-from typing import Literal
 import faiss
 
 from core.embedding import embed_chunks
@@ -7,7 +5,8 @@ from settings.settings import config
 from core.utils import replace_abbreviations
 from domain.vignette import Vignette, Question
 from domain.document import Chunk
-from core.model import create_user_question_prompt, generate_response
+from core.model import generate_response
+from core.question_answering import create_user_question_prompt
 from prompts import HYPOTHETICAL_DOCUMENT_PROMPT, STEPBACK_PROMPT, DECOMPOSING_PROMPT, PARAPHRASING_PROMPT
 
 from langchain_core.output_parsers import BaseOutputParser
@@ -119,32 +118,28 @@ def _retrieve_and_rank(queries: list[str], faiss_service: FaissService) -> list[
 
 
 def retrieve(
-    vignette: Vignette,
-    question: Question,
+    vignette: Vignette | None,
+    question: Question | str,
     faiss_service: FaissService,
+    production: bool = False,
 ) -> list[Chunk]:
-    if config.use_original_query_only:
-        print("Using original query only")
-        return _retrieve(question.get_question(), faiss_service)
-
-    print("Using optimized query with method: ", config.optimization_method)
-
-    system_prompt = get_optimization_prompt()
-    user_prompt = create_user_question_prompt(vignette, question)
-    response = generate_response(user_prompt, system_prompt)
-    # print("Response:", response)
-    new_query = parse_optimized_query(response)
-    # print("New query:", new_query)
-    # add parser because decompose will return two queries
-    if isinstance(new_query, list):
-        retrieved_documents = _retrieve_and_rank(new_query, faiss_service)
+    if production:
+        if config.use_original_query_only:
+            return _retrieve(question, faiss_service)
     else:
-        retrieved_documents = _retrieve(new_query, faiss_service)
+        if config.use_original_query_only:
+            return _retrieve(question.get_question(), faiss_service)
 
-    # if config.use_original_along_with_optimized:
-    #     orig_retrieved_documents = _retrieve(question.get_question(), faiss_service)
-    #     retrieved_documents.extend(orig_retrieved_documents)
-    #     retrieved_documents = list(set(retrieved_documents))
-    #     # TODO: Maybe sort by similarity score?
+        print("Using optimized query with method: ", config.optimization_method)
 
-    return retrieved_documents
+        system_prompt = get_optimization_prompt()
+        user_prompt = create_user_question_prompt(vignette, question)
+        response = generate_response(user_prompt, system_prompt)
+        new_query = parse_optimized_query(response)
+        # add parser because decompose will return two queries
+        if isinstance(new_query, list):
+            retrieved_documents = _retrieve_and_rank(new_query, faiss_service)
+        else:
+            retrieved_documents = _retrieve(new_query, faiss_service)
+
+        return retrieved_documents
