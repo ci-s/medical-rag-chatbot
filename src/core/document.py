@@ -5,6 +5,7 @@ import time
 from domain.document import Document, Page
 from core.utils import levenshteinDistance, normalize_text, replace_abbreviations
 from core.model import generate_response
+from parsing import get_format_instructions, WhitespaceInjectionResponse, parse_with_retry
 
 header_pattern = r"Klinik\sund\sPoliklinik\sfür\sNeurologie"
 footer_pattern_page = r"Seite\s\d+\svon\s\d+"
@@ -27,7 +28,7 @@ REMOVE_LIST = [
 ]
 
 
-def has_significant_changes(original, modified, threshold=20):
+def calculate_num_changes(original, modified):
     normalized_original = normalize_text(original)
     normalized_modified = normalize_text(modified)
 
@@ -36,32 +37,32 @@ def has_significant_changes(original, modified, threshold=20):
     return distance
 
 
-def inject_whitespace_w_llm(text: str):
-    prompt = f"""
-        I have a block of text where some words are concatenated due to errors in PDF extraction. Your task is to identify where spaces are missing between words and add them where necessary. Please only adjust spacing—do not modify punctuation, capitalization, or any part of the text otherwise. Return the modified text with spaces added where needed in a json format as follows: {{"output": "modified text here"}} Say nothing else and don't change anything else. Be specifically careful about not modifying headings and subheadings' numberings.
-        Text: {text}
+def inject_whitespace_w_llm(text: str) -> str:
+    system_prompt = """
+        You're a helpful AI assistant that has been asked to fix a block of text where some words are concatenated due to errors in PDF extraction. Your task is to identify where spaces are missing between words and add them where necessary. Please only adjust spacing—do not modify punctuation, capitalization, or any part of the text otherwise. Also there is one exception, do not modify headings and subheadings. Return the modified text with spaces added where needed in a json format as follows: {"processed_text": "whitespace injected text here"}. Say nothing else and don't change anything else.
     """
+    user_prompt = """
+     Text: {text}
+    """
+    user_prompt = user_prompt.format(text=text)
+    response = generate_response(
+        system_prompt,
+        user_prompt,
+    )
+    parsed_response = parse_with_retry(WhitespaceInjectionResponse, response)
+    return parsed_response.processed_text
 
-    return generate_response(prompt)
 
-
-def inject_whitespace(content: str, num_changes_threshold: int = 20) -> str:
+def inject_whitespace(content: str, num_changes_threshold: int = 50) -> str:
     injected_content = inject_whitespace_w_llm(content)
-
-    if isinstance(injected_content, dict):
-        injected_content = injected_content["output"]
-
-    num_changes = has_significant_changes(content, injected_content)
+    num_changes = calculate_num_changes(content, injected_content)
+    print(f"Number of changes: {num_changes}")
     if num_changes > num_changes_threshold:
-        # Create a logger and artifact saver to save the significantly changed content
-        # significantly_changed[id] = {
-        #     "num_changes": num_changes,
-        #     "original": content,
-        #     "modified": injected_content,
-        # }
-        return content
-    else:
-        return injected_content
+        print(f"Significant changes detected. Number of changes: {num_changes}")
+        print("Original content: ", content)
+        print("Modified content: ", injected_content)
+
+    return injected_content
 
 
 def preprocess_content(content: str, whitespace_injection: bool = False, is_replace_abbreviations: bool = False) -> str:
@@ -91,7 +92,7 @@ def filter_document(document: Document, pages: list[int]) -> Document:
     return document
 
 
-def load_document(file_path, pages: list[int] = []) -> Document:
+def load_document(file_path: str, pages: list[int] = []) -> Document:
     """
     TODO: Add docstring
     """
@@ -107,7 +108,9 @@ def load_document(file_path, pages: list[int] = []) -> Document:
             if i + 1 == 24:  # TODO: Temprorary fix for duplicate heading 4.3
                 page_content = page_content.replace("4.3 Blutdrucktherapie", "")
 
-            doc.add_page(Page(page_number=i + 1, token_count=None, raw_content=page_content, processed_content=None))
+            doc.add_page(
+                Page(page_number=i + 1, token_count=None, raw_content=page_content, processed_content=page_content)
+            )
     elif file_path.endswith(".pkl"):
         doc = Document.load(file_path)
         doc = filter_document(doc, pages)
@@ -126,14 +129,15 @@ def process_document(
 ) -> Document:
     total_replaced_abbrev_count = 0
     for page in document.pages:
-        page.processed_content, replaced_count = preprocess_content(
-            page.raw_content, whitespace_injection, is_replace_abbreviations
+        processed_content, replaced_count = preprocess_content(
+            page.processed_content, whitespace_injection, is_replace_abbreviations
         )
+        page.processed_content = processed_content
         total_replaced_abbrev_count += replaced_count
 
     if whitespace_injection:
         document.save(
-            document.path.replace(".pdf", f"_processed_with_whitespace_{time.time()}.pkl")
+            document.path.replace(".pdf", f"_processed_with_whitespace_{int(time.time())}.pkl")
         )  # TODO: artifacts folder
     print(f"Number of abbreviations replaced total: {total_replaced_abbrev_count}")
     return document

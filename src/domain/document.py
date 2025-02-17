@@ -2,11 +2,14 @@ import pickle
 
 
 class Page:
-    def __init__(self, page_number: int, token_count: int, raw_content: str, processed_content: str):
+    def __init__(self, page_number: int, token_count: int, raw_content: str, processed_content: str | None = None):
         self.page_number = page_number
         self.token_count = token_count
         self.raw_content = raw_content
-        self.processed_content = processed_content
+        if processed_content is None:
+            self.processed_content = raw_content
+        else:
+            self.processed_content = processed_content
 
 
 class Document:

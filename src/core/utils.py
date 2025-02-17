@@ -38,11 +38,11 @@ def merge_document(document: Document, pages: list[int], raw: bool = False) -> s
     return doc
 
 
-def replace_abbreviations(text: str) -> Union[str, int]:
+def replace_abbreviations(text: str) -> tuple[str, int]:
     simple_abbreviations = [abbr for abbr in ABBREVIATION_DICT if abbr.isalnum()]
     complex_abbreviations = [abbr for abbr in ABBREVIATION_DICT if not abbr.isalnum()]
 
-    simple_pattern = r"\b(" + "|".join(re.escape(abbr) for abbr in simple_abbreviations) + r")\b"
+    simple_pattern = r"(?<!\w)(" + "|".join(re.escape(abbr) for abbr in simple_abbreviations) + r")(?!\w)"
 
     complex_pattern = r"(" + "|".join(re.escape(abbr) for abbr in complex_abbreviations) + r")(?=\W|$)"
 
