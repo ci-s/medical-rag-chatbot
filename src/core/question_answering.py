@@ -83,7 +83,7 @@ def create_question_prompt_w_docs(retrieved_documents: Chunk, vignette: Vignette
         retrieved_documents=documents_str,
         user_prompt=user_prompt,
     )
-    user_prompt, replaced_count = replace_abbreviations(user_prompt)
+    # user_prompt, replaced_count = replace_abbreviations(user_prompt)
 
     system_prompt = QUESTION_PROMPT.format(format_instructions=get_format_instructions(Answer))
     return system_prompt, user_prompt
@@ -104,7 +104,7 @@ def create_question_prompt_w_docs_prod(retrieved_documents: Chunk, question: str
         retrieved_documents=documents_str,
         user_prompt=user_prompt,
     )
-    user_prompt, replaced_count = replace_abbreviations(user_prompt)
+    # user_prompt, replaced_count = replace_abbreviations(user_prompt)
 
     system_prompt = QUESTION_PROMPT.format(format_instructions=get_format_instructions(Answer))
     return system_prompt, user_prompt

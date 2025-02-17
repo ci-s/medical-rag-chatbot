@@ -127,7 +127,7 @@ def process_document(
     total_replaced_abbrev_count = 0
     for page in document.pages:
         page.processed_content, replaced_count = preprocess_content(
-            page.raw_content, whitespace_injection, is_replace_abbreviations
+            page.processed_content, whitespace_injection, is_replace_abbreviations
         )
         total_replaced_abbrev_count += replaced_count
 

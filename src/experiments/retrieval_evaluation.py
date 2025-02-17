@@ -18,14 +18,10 @@ from settings import get_page_types, config
 file_path = os.path.join(settings.data_path, settings.file_name)
 pages, _, _, _ = get_page_types()
 # pages = list(range(7, 109))
-# toc_pages = [2, 3]
+toc_pages = [2, 3]
 
 document = get_document(file_path, pages)
-# toc = get_document(
-#     "/Users/cisemaltan/workspace/thesis/medical-rag-chatbot/data/MNL_VA_Handbuch_vaskulaere_Neurologie_221230.pdf",
-#     toc_pages,
-#     is_replace_abbreviations=True,
-# )
+toc = None  # get_document(None)
 
 method_args = {
     # "semantic": {},  # set NOMIC_API_KEY
@@ -36,7 +32,7 @@ method_args = {
 
 result_dicts = []
 for method, args in method_args.items():
-    for optim_method in [None, "hypothetical_document", "decomposing", "paraphrasing", "stepback"]:
+    for optim_method in [None]:  # , "hypothetical_document", "decomposing", "paraphrasing", "stepback"
         if optim_method:
             config.optimization_method = optim_method
             config.use_original_query_only = False

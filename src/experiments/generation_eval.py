@@ -24,9 +24,9 @@ if config.text_questions_only:
 else:
     pages = list(range(7, 109))
 print(f"Number of pages: {len(pages)}")
-toc_pages = [2, 3]
+# toc_pages = [2, 3]
 
-document = get_document(file_path, pages)
+document = get_document(file_path, pages, is_replace_abbreviations=True)
 # toc = get_document(file_path, toc_pages)
 chunks = chunk_document(method="size", document=document, pages=pages, chunk_size=512)
 
@@ -38,6 +38,10 @@ faiss_service.create_index(chunks)
 result_dicts = []
 for optim_method in [
     None,
+    "hypothetical_document",
+    "decomposing",
+    "paraphrasing",
+    "stepback",
 ]:  # None, "hypothetical_document", "decomposing", "paraphrasing", "stepback"
     if optim_method:
         config.optimization_method = optim_method
