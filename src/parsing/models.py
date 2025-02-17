@@ -40,3 +40,7 @@ class ContextRelevanceResultResponse(BaseModel):
 
 class ParaphrasedGroundTruth(BaseModel):
     paraphrased: list[str] = Field(description="List of paraphrased versions of the ground truth")
+
+
+class WhitespaceInjectionResponse(BaseModel):
+    processed_text: str = Field(description="The text with injected whitespace")
