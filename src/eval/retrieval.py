@@ -50,7 +50,6 @@ def evaluate_source(
                 pass
 
     print(f"Questions from {source}: {len([all_stats for s in all_stats if s is not None])}")
-    print("All stats: ", all_stats)
     return Stats(
         recall=mean([stat.recall for stat in all_stats if stat is not None]),
         precision=mean([stat.precision for stat in all_stats if stat is not None]),

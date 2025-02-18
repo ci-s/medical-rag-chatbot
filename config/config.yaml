@@ -5,10 +5,10 @@ llm_path: "" # set only if inference_type is "exllama" and inference_location is
 text_questions_only: true
 replace_abbreviations: true
 # if true then go grab the saved doc
-inject_whitespace: true
+inject_whitespace: false
 # if true then go grab the saved doc
 
-experiment_name: 
+experiment_name: generation_processed_content
 
 include_context: false # for generation
 include_preceding_question_answers: true
@@ -24,3 +24,5 @@ use_original_along_with_optimized: false
 
 most_relevant_chunk_first: true
 summarize_retrieved_documents: false
+match_chunk_similarity_threshold: 95
+chunk_size: 512

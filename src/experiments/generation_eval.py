@@ -28,7 +28,7 @@ toc_pages = [2, 3]
 
 document = get_document(file_path, pages)
 # toc = get_document(file_path, toc_pages)
-chunks = chunk_document(method="size", document=document, pages=pages, chunk_size=512)
+chunks = chunk_document(method="size", document=document, pages=pages, chunk_size=config.chunk_size)
 
 
 faiss_service = FaissService()
@@ -49,15 +49,10 @@ for optim_method in [
     # avg_score, all_feedbacks = evaluate_ragas("Handbuch", faiss_service, text_only=text_only)
     avg_score, all_feedbacks = evaluate_source("Handbuch", faiss_service, text_only=config.text_questions_only)
     tim = int(time.time())
-    # scores = []
-    # for feedback in all_feedbacks:
-    #     scores.append(float(feedback.score))
-
-    # counted_values = Counter(scores)
-    # std_dev = statistics.stdev(scores)
 
     result_dict = {
         "config": config.model_dump(),
+        "settings": settings.model_dump(mode="json"),
         "all_feedbacks": [fb.to_dict() for fb in all_feedbacks],
         "avg_score": avg_score,
         # "std_dev": std_dev,

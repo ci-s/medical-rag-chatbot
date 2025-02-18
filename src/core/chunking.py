@@ -2,7 +2,7 @@ import json
 import re
 import time
 from typing import Literal
-from langchain.text_splitter import RecursiveCharacterTextSplitter
+from langchain.text_splitter import CharacterTextSplitter, RecursiveCharacterTextSplitter
 from langchain_experimental.text_splitter import SemanticChunker
 from langchain_nomic import NomicEmbeddings
 
@@ -11,11 +11,13 @@ from core.model import generate_response
 from core.utils import merge_document
 from domain.document import Document, Chunk
 from prompts import HEADINGS_PROMPT
+from settings.settings import config
 
 
 def chunk_by_size(document: Document, pages: list[int], chunk_size: int = 512, overlap: int = 0) -> list[Chunk]:
     document_str = merge_document(document, pages)
     print(f"Chunking by size {chunk_size} with overlap {overlap}")
+    # text_splitter = CharacterTextSplitter(separator=" ", chunk_size=chunk_size, chunk_overlap=overlap)
     text_splitter = RecursiveCharacterTextSplitter(chunk_size=chunk_size, chunk_overlap=overlap)
 
     docs = text_splitter.create_documents([document_str])
@@ -194,7 +196,11 @@ def chunk_by_section(
 
 
 def match_chunks_with_pages(
-    chunks: list[Chunk], document: Document, pages: list[int], similarity_threshold: int = 97, overlap: bool = False
+    chunks: list[Chunk],
+    document: Document,
+    pages: list[int],
+    similarity_threshold: int = config.match_chunk_similarity_threshold,
+    overlap: bool = False,
 ):
     """Works with consecutive pages only
 

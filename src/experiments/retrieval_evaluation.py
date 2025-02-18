@@ -29,14 +29,14 @@ document = get_document(file_path, pages)
 
 method_args = {
     # "semantic": {},  # set NOMIC_API_KEY
-    "size": {"chunk_size": 512},
-    # "section": {"toc": toc},
+    "size": {"chunk_size": config.chunk_size},
+    # "section": {"toc": None},
 }
 
 
 result_dicts = []
 for method, args in method_args.items():
-    for optim_method in [None, "hypothetical_document", "decomposing", "paraphrasing", "stepback"]:
+    for optim_method in [None]:  # , "hypothetical_document", "decomposing", "paraphrasing", "stepback"
         if optim_method:
             config.optimization_method = optim_method
             config.use_original_query_only = False
@@ -48,6 +48,7 @@ for method, args in method_args.items():
         subdict["method"] = method
         subdict["optim_method"] = str(optim_method)
         subdict["config"] = config.model_dump()
+        subdict["settings"] = settings.model_dump(mode="json")
 
         print(f"Method: {method}")
         chunks = chunk_document(method=method, document=document, pages=pages, **args)

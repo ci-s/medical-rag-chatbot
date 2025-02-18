@@ -53,6 +53,8 @@ class Config(BaseModel):
     use_original_along_with_optimized: bool = False
     most_relevant_chunk_first: bool = True
     summarize_retrieved_documents: bool = False
+    match_chunk_similarity_threshold: int = 97
+    chunk_size: int = 512
 
     def dump(self, file_path: str) -> None:
         with open(file_path, "w", encoding="utf-8") as file:
