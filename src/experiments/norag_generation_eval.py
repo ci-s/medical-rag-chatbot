@@ -10,7 +10,7 @@ project_root = os.path.abspath(os.path.join(os.getcwd(), ".."))
 sys.path.append(project_root)
 
 from settings.settings import settings
-from settings import config
+from settings import config, get_page_types
 
 from core.model import generate_response
 from domain.evaluation import Feedback
@@ -22,6 +22,8 @@ from core.utils import replace_abbreviations
 from prompts import GENERATION_EVALUATION_PROMPT
 from parsing import Feedback as Feedback_Parsing
 from domain.vignette import Question, Vignette
+from domain.document import Document
+from core.document import get_document
 
 NORAG_USER_PROMPT = """
     
@@ -31,18 +33,17 @@ NORAG_USER_PROMPT = """
 """
 
 
-def llm_as_a_judge(
-    vignette: Vignette,
-    question: Question,
-    generated_answer: str,
-) -> Feedback:
+def llm_as_a_judge(vignette: Vignette, question: Question, generated_answer: str, document: Document) -> Feedback:
     eval_prompt = GENERATION_EVALUATION_PROMPT.format(
-        instruction=f"""
+        reference_pages=" ".join(
+            [document.get_processed_content(page_number) for page_number in question.get_reference()]
+        ),
+        question=f"""
             Background:\n{vignette.background}
             Question:\n{question.get_question()}
             """,
-        response=generated_answer,
         reference_answer=question.get_answer(),
+        generated_answer=generated_answer,
     )
 
     eval_result = generate_response(eval_prompt)
@@ -55,10 +56,7 @@ def llm_as_a_judge(
     return Feedback(question.get_id(), eval_result.feedback, eval_result.score, generated_answer)
 
 
-def evaluate_single(
-    vignette_id: int,
-    question_id: int,
-) -> Feedback:
+def evaluate_single(vignette_id: int, question_id: int, document: Document) -> Feedback:
     vignette = VIGNETTE_COLLECTION.get_vignette_by_id(vignette_id)
     questions = vignette.get_questions()
     print(f"Questions in vignette {vignette_id}: {len(questions)}")
@@ -81,27 +79,27 @@ def evaluate_single(
     generated_answer = generate_response(system_prompt, user_prompt)
     generated_answer = parse_with_retry(Answer, generated_answer)
 
-    return llm_as_a_judge(vignette, question, generated_answer.answer)
+    return llm_as_a_judge(vignette, question, generated_answer.answer, document)
 
 
 def evaluate_source(
     source: Literal["Handbuch", "Antibiotika"],
-    text_only: bool = False,
+    document: Document,
+    text_only: bool = True,
 ) -> tuple[int, list[Feedback]]:
     all_feedbacks = []
 
     for vignette in VIGNETTE_COLLECTION.get_vignettes():
+        print(f"Vignette: {vignette.get_id()}")
         for question in vignette.get_questions():
+            print(f"Question: {question.get_id()}")
             if question.get_source() != source:
                 continue
             if text_only and question.text_only:
-                all_feedbacks.append(evaluate_single(vignette.get_id(), question.get_id()))
-            elif not text_only:
-                all_feedbacks.append(evaluate_single(vignette.get_id(), question.get_id()))
+                print("Evaluating text only")
+                all_feedbacks.append(evaluate_single(vignette.get_id(), question.get_id(), document))
             else:
                 pass
-            break
-        break
 
     print(f"Questions from {source}: {len([all_feedbacks for s in all_feedbacks if s is not None])}")
 
@@ -114,10 +112,18 @@ def evaluate_source(
     return avg_score, all_feedbacks
 
 
+file_path = os.path.join(settings.data_path, settings.file_name)
+
+if config.text_questions_only:
+    pages, _, _, _ = get_page_types()
+else:
+    pages = list(range(7, 109))
+
+document = get_document(file_path, pages)
 result_dict = []
 
 
-avg_score, all_feedbacks = evaluate_source("Handbuch", text_only=config.text_questions_only)
+avg_score, all_feedbacks = evaluate_source("Handbuch", document, text_only=config.text_questions_only)
 tim = int(time.time())
 
 result_dict = {

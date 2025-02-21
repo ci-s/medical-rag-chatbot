@@ -45,7 +45,10 @@ You are an expert evaluator assessing the quality of a generated answer based on
 	•	Document Page Content (Domain Knowledge):
 The following document page provides relevant background information related to the topic. However, it may contain multiple facts or numbers, and not all of them are correct for this specific evaluation.
 Do not assume any information from the document page is the correct answer unless it aligns with the reference answer.
-{document_page}
+{reference_pages}
+	•	Question:
+This is the question that the generated answer should respond to.
+{question}
 	•	Reference Answer (Correct Answer):
 This is the correct answer that the generated answer should align with in meaning.
 {reference_answer}

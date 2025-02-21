@@ -47,7 +47,9 @@ for optim_method in [
         config.use_original_query_only = True
 
     # avg_score, all_feedbacks = evaluate_ragas("Handbuch", faiss_service, text_only=text_only)
-    avg_score, all_feedbacks = evaluate_source("Handbuch", faiss_service, text_only=config.text_questions_only)
+    avg_score, all_feedbacks = evaluate_source(
+        "Handbuch", faiss_service, document, text_only=config.text_questions_only
+    )
     tim = int(time.time())
 
     result_dict = {

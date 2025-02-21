@@ -6,7 +6,7 @@ from services.retrieval import FaissService, retrieve
 from core.model import generate_response
 from core.question_answering import create_question_prompt_w_docs
 from domain.evaluation import Feedback
-from domain.document import Chunk
+from domain.document import Chunk, Document
 from settings import VIGNETTE_COLLECTION
 from .generation_metrics import llm_as_a_judge, faithfulness, answer_relevance
 from .retrieval_metrics import context_relevance
@@ -48,6 +48,7 @@ def evaluate_single(
     vignette_id: int,
     question_id: int,
     faiss_service: FaissService,
+    document: Document,
 ) -> Feedback:
     vignette = VIGNETTE_COLLECTION.get_vignette_by_id(vignette_id)
     questions = vignette.get_questions()
@@ -64,12 +65,13 @@ def evaluate_single(
     generated_answer = generate_response(system_prompt, user_prompt)
     generated_answer = parse_with_retry(Answer, generated_answer)
 
-    return llm_as_a_judge(vignette, question, generated_answer.answer, retrieved_documents)
+    return llm_as_a_judge(vignette, question, generated_answer.answer, document)
 
 
 def evaluate_source(
     source: Literal["Handbuch", "Antibiotika"],
     faiss_service: FaissService,
+    document: Document,
     text_only: bool = False,
 ) -> tuple[int, list[Feedback]]:
     all_feedbacks = []
@@ -79,9 +81,9 @@ def evaluate_source(
             if question.get_source() != source:
                 continue
             if text_only and question.text_only:
-                all_feedbacks.append(evaluate_single(vignette.get_id(), question.get_id(), faiss_service))
+                all_feedbacks.append(evaluate_single(vignette.get_id(), question.get_id(), faiss_service, document))
             elif not text_only:
-                all_feedbacks.append(evaluate_single(vignette.get_id(), question.get_id(), faiss_service))
+                all_feedbacks.append(evaluate_single(vignette.get_id(), question.get_id(), faiss_service, document))
             else:
                 pass
 
