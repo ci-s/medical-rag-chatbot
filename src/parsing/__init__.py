@@ -1,5 +1,6 @@
 from .models import (
     Answer,
+    ExtendedAnswer,
     Feedback,
     Summary,
     Statements,

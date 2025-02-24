@@ -4,6 +4,22 @@ from pydantic import BaseModel, Field
 class Answer(BaseModel):
     answer: str = Field(description="the answer to the question")
 
+    def to_dict(self):
+        return {
+            "answer": self.answer,
+        }
+
+
+class ExtendedAnswer(BaseModel):
+    answer: str = Field(description="the answer to the question")
+    reasoning: str = Field(description="the reasoning behind the answer")
+
+    def to_dict(self):
+        return {
+            "answer": self.answer,
+            "reasoning": self.reasoning,
+        }
+
 
 class Feedback(BaseModel):
     feedback: str = Field(description="the feedback for the answer")

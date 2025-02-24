@@ -25,6 +25,10 @@ from domain.vignette import Question, Vignette
 from domain.document import Document
 from core.document import get_document
 
+import mlflow
+
+mlflow.set_tracking_uri(uri="http://127.0.0.1:8080")
+mlflow.set_experiment("Phase 1 Generation")
 NORAG_USER_PROMPT = """
     
     {user_prompt}
@@ -137,6 +141,16 @@ result_dict = {
 output_file = f"norag_generation_eval_{tim}.json"
 output_path = os.path.join(settings.results_path, output_file)
 with open(output_path, "w") as file:
-    json.dump(result_dict, file, indent=4)
+    json.dump(result_dict, file, indent=4, ensure_ascii=False)
+
+
+with mlflow.start_run():
+    mlflow.log_params(config.model_dump())
+    mlflow.log_params(settings.model_dump(mode="json"))
+    mlflow.log_params({"num_questions": len(all_feedbacks)})
+    mlflow.log_metric("avg_score", avg_score)
+    mlflow.set_tag("NoRAG", "All eval")
+
+    mlflow.log_artifact(output_path)
 
 print("Results are saved in: ", output_path)

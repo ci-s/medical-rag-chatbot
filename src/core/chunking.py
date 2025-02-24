@@ -11,7 +11,7 @@ from core.model import generate_response
 from core.utils import merge_document
 from domain.document import Document, Chunk
 from prompts import HEADINGS_PROMPT
-from settings.settings import config
+from settings.settings import config, settings
 
 
 def chunk_by_size(document: Document, pages: list[int], chunk_size: int = 512, overlap: int = 0) -> list[Chunk]:
@@ -71,18 +71,25 @@ def convert_output_to_json(output: str):
         raise ValueError(f"Failed to parse JSON: {e}")
 
 
-def get_headings(document: Document) -> list[str]:
-    headings = []
+def get_headings(document: Document | None) -> list[str]:
+    if not document:
+        print(f"Loading headings from presaved file: {settings.headings_json_path}")
+        with open(settings.headings_json_path, "r", encoding="utf-8") as file:
+            data = json.load(file)
+        headings = data["headings"]
+    else:
+        print("Extracting headings from provided ToC document")
+        headings = []
 
-    for page in document.pages:
-        response = generate_response(HEADINGS_PROMPT + page.processed_content)
-        print(response)
-        if isinstance(response, list):
-            heading_dict_list = response
-        else:
-            heading_dict_list = convert_output_to_json(response)
-        headings.extend([d["number"] + ". " + d["heading"] for d in heading_dict_list])
-        print("page is done")
+        for page in document.pages:
+            response = generate_response(HEADINGS_PROMPT + page.processed_content)
+            print(response)
+            if isinstance(response, list):
+                heading_dict_list = response
+            else:
+                heading_dict_list = convert_output_to_json(response)
+            headings.extend([d["number"] + ". " + d["heading"] for d in heading_dict_list])
+            print("page is done")
 
     return headings
 
@@ -161,21 +168,16 @@ def postprocess_sections(sections: dict[str, str], lean=True) -> dict[str, str]:
 
 def chunk_by_section(
     document: Document,
-    toc: Document,
+    toc: Document | None,
     pages: list[int],
 ) -> list[Chunk]:
     """
     Splits a document into chunks based on its sections and headings hierarchy.
     """
-    # headings = get_headings(toc)
-    # print("Extracted headings:\n")
-    # for heading in headings:
-    #     print("\n" + heading)
-    with open(
-        "/Users/cisemaltan/workspace/thesis/medical-rag-chatbot/data/headings.json", "r", encoding="utf-8"
-    ) as file:
-        data = json.load(file)
-    headings = data["headings"]
+    headings = get_headings(toc)
+    print("Extracted headings:\n")
+    for heading in headings:
+        print("\n" + heading)
 
     hierarchy = build_heading_hierarchy(headings)
     document_str = merge_document(document, pages=pages)
@@ -191,7 +193,78 @@ def chunk_by_section(
     for i in range(len(chunks)):
         chunks[i].text = sections_with_full_hieararchy_titles[i]
     if problem_count > 0:
-        raise ValueError("Problems encountered during matchinkg chunks with pages")
+        raise ValueError("Problems encountered during matching chunks with pages")
+    return chunks
+
+
+def split_into_fixed_size(text: str, chunk_size: int) -> list[str]:
+    """
+    Splits text into smaller chunks of approximately `chunk_size` characters while
+    trying to avoid breaking in the middle of words.
+    """
+    words = text.split()
+    chunks = []
+    current_chunk = []
+    current_length = 0
+
+    for word in words:
+        if current_length + len(word) + 1 > chunk_size:
+            chunks.append(" ".join(current_chunk))
+            current_chunk = []
+            current_length = 0
+
+        current_chunk.append(word)
+        current_length += len(word) + 1
+
+    if current_chunk:
+        chunks.append(" ".join(current_chunk))
+
+    return chunks
+
+
+def chunk_by_section_and_size(
+    document: Document,
+    toc: Document | None,
+    pages: list[int],
+    chunk_size: int = 256,
+):
+    """
+    Splits a document into chunks based on its sections and headings hierarchy. None of the chunks contains the section heading.
+
+    Args:
+        document (Document): _description_
+        toc (Document | None): _description_
+        pages (list[int]): _description_
+        chunk_size (int, optional): _description_. Defaults to 256.
+
+    Returns:
+        _type_: _description_
+    """
+    print(f"Chunking by section and size {chunk_size}")
+    headings = get_headings(toc)
+    print("Extracted headings:\n")
+    for heading in headings:
+        print("\n" + heading)
+
+    hierarchy = build_heading_hierarchy(headings)
+    document_str = merge_document(document, pages=pages)
+    sections = split_by_headings(document_str, headings, hierarchy)
+
+    chunks = []
+    for heading, section in sections.items():
+        split_texts = split_into_fixed_size(section["content"], chunk_size)
+        for i, sub_text in enumerate(split_texts):
+            if i == 0:
+                chunks.append(Chunk(heading + "\n" + sub_text.strip(), None, None, section_heading=heading))
+            else:
+                chunks.append(Chunk(sub_text, None, None, section_heading=heading))
+
+    chunks, problem_count = match_chunks_with_pages(chunks, document, pages)
+
+    for chunk in chunks:
+        if chunk.section_heading:
+            chunk.text = chunk.text.replace(chunk.section_heading, "").strip()
+
     return chunks
 
 
@@ -250,6 +323,7 @@ def match_chunks_with_pages(
 
             if current_pointer - start_pointer == 15:
                 print("Pointers grew apart")
+                print("Chunk: ", chunk.text)
                 problem_counter += 1
                 break
 
@@ -273,9 +347,11 @@ def chunk_document(
     elif method == "section":
         print("Chunking by section")
         toc = kwargs.pop("toc", None)
-        if toc is None:
-            ValueError("toc document must be provided for section method")
         chunks = chunk_by_section(document, toc, pages, **kwargs)
+    elif method == "section_and_size":
+        print("Chunking by section and size")
+        toc = kwargs.pop("toc", None)
+        chunks = chunk_by_section_and_size(document, toc, pages, **kwargs)
     else:
         ValueError("Invalid method")
 

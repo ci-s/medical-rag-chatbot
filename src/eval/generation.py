@@ -10,7 +10,8 @@ from domain.document import Chunk, Document
 from settings import VIGNETTE_COLLECTION
 from .generation_metrics import llm_as_a_judge, faithfulness, answer_relevance
 from .retrieval_metrics import context_relevance
-from parsing import Answer, parse_with_retry
+from parsing import Answer, parse_with_retry, ExtendedAnswer
+from settings.settings import config
 
 
 class RAGASResult:
@@ -44,12 +45,37 @@ class RAGASResult:
         }
 
 
+class FeedbackResult(Feedback):
+    def __init__(
+        self,
+        feedback: str,
+        question_id: int,
+        score: float,
+        generated_answer: str = "",
+        reference_pages: list[int] = [],
+        retrieved_documents: list[Chunk] = [],
+    ):
+        super().__init__(question_id=question_id, feedback=feedback, score=score, generated_answer=generated_answer)
+        self.retrieved_documents = retrieved_documents
+        self.reference_pages = reference_pages
+
+    def to_dict(self):
+        return {
+            "question_id": self.question_id,
+            "feedback": self.text,
+            "score": self.score,
+            "generated_answer": self.generated_answer,
+            "reference_pages": self.reference_pages,
+            "retrieved_documents": [doc.to_dict() for doc in self.retrieved_documents],
+        }
+
+
 def evaluate_single(
     vignette_id: int,
     question_id: int,
     faiss_service: FaissService,
     document: Document,
-) -> Feedback:
+) -> FeedbackResult:
     vignette = VIGNETTE_COLLECTION.get_vignette_by_id(vignette_id)
     questions = vignette.get_questions()
     print(f"Questions in vignette {vignette_id}: {len(questions)}")
@@ -63,9 +89,19 @@ def evaluate_single(
     system_prompt, user_prompt = create_question_prompt_w_docs(retrieved_documents, vignette, question)
 
     generated_answer = generate_response(system_prompt, user_prompt)
-    generated_answer = parse_with_retry(Answer, generated_answer)
-
-    return llm_as_a_judge(vignette, question, generated_answer.answer, document)
+    if config.reasoning:
+        generated_answer = parse_with_retry(ExtendedAnswer, generated_answer)
+    else:
+        generated_answer = parse_with_retry(Answer, generated_answer)
+    feedback = llm_as_a_judge(vignette, question, generated_answer.answer, document)
+    return FeedbackResult(
+        feedback=feedback.text,
+        question_id=question_id,
+        reference_pages=question.get_reference(),
+        score=feedback.score,
+        generated_answer=generated_answer.to_dict(),
+        retrieved_documents=retrieved_documents,
+    )
 
 
 def evaluate_source(
@@ -73,7 +109,7 @@ def evaluate_source(
     faiss_service: FaissService,
     document: Document,
     text_only: bool = False,
-) -> tuple[int, list[Feedback]]:
+) -> tuple[int, list[FeedbackResult]]:
     all_feedbacks = []
 
     for vignette in VIGNETTE_COLLECTION.get_vignettes():
@@ -90,7 +126,9 @@ def evaluate_source(
     print(f"Questions from {source}: {len([all_feedbacks for s in all_feedbacks if s is not None])}")
 
     try:
-        avg_score = mean([float(feedback.score) for feedback in all_feedbacks if feedback.score is not None])
+        avg_score = mean(
+            [float(feedback_result.score) for feedback_result in all_feedbacks if feedback_result.score is not None]
+        )
     except Exception as e:
         print("Trouble calculating average score: ", e)
         avg_score = 0
@@ -103,6 +141,7 @@ def evaluate_single_w_ragas(
     question_id: int,
     faiss_service: FaissService,
 ) -> RAGASResult:
+    # TODO: Not up to date with the latest changes
     vignette = VIGNETTE_COLLECTION.get_vignette_by_id(vignette_id)
     questions = vignette.get_questions()
     print(f"Questions in vignette {vignette_id}: {len(questions)}")
