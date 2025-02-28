@@ -59,6 +59,7 @@ class Config(BaseModel):
     surrounding_chunk_length: int = 0
 
     reasoning: bool = False
+    thinking: bool = False
 
     def dump(self, file_path: str) -> None:
         with open(file_path, "w", encoding="utf-8") as file:

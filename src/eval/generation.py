@@ -10,7 +10,7 @@ from domain.document import Chunk, Document
 from settings import VIGNETTE_COLLECTION
 from .generation_metrics import llm_as_a_judge, faithfulness, answer_relevance
 from .retrieval_metrics import context_relevance
-from parsing import Answer, parse_with_retry, ExtendedAnswer
+from parsing import Answer, parse_with_retry, ReasoningAnswer, ThinkingAnswer
 from settings.settings import config
 
 
@@ -87,12 +87,14 @@ def evaluate_single(
 
     retrieved_documents = retrieve(vignette, question, faiss_service)
     system_prompt, user_prompt = create_question_prompt_w_docs(retrieved_documents, vignette, question)
-
     generated_answer = generate_response(system_prompt, user_prompt)
     if config.reasoning:
-        generated_answer = parse_with_retry(ExtendedAnswer, generated_answer)
+        generated_answer = parse_with_retry(ReasoningAnswer, generated_answer)
+    elif config.thinking:
+        generated_answer = parse_with_retry(ThinkingAnswer, generated_answer)
     else:
         generated_answer = parse_with_retry(Answer, generated_answer)
+
     feedback = llm_as_a_judge(vignette, question, generated_answer.answer, document)
     return FeedbackResult(
         feedback=feedback.text,

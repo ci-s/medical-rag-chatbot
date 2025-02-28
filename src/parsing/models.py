@@ -10,7 +10,7 @@ class Answer(BaseModel):
         }
 
 
-class ExtendedAnswer(BaseModel):
+class ReasoningAnswer(BaseModel):
     answer: str = Field(description="the answer to the question")
     reasoning: str = Field(description="the reasoning behind the answer")
 
@@ -18,6 +18,38 @@ class ExtendedAnswer(BaseModel):
         return {
             "answer": self.answer,
             "reasoning": self.reasoning,
+        }
+
+
+class ThinkingAnswer(BaseModel):
+    """
+    Represents an AI-generated response that includes both a reasoning process
+    and the final answer. This structure encourages the model to articulate
+    its thought process before providing a direct response.
+
+    Attributes:
+        thinking (str): A step-by-step reasoning or thought process leading
+                       to the final answer. This field should capture
+                       intermediate deductions, considerations, and logical
+                       steps taken to arrive at the conclusion.
+
+        answer (str): The final response to the given question, derived
+                      from the preceding thinking process.
+    """
+
+    thinking: str = Field(description="Step-by-step reasoning process leading to the final answer.")
+    answer: str = Field(description="The final answer derived from the thinking process.")
+
+    def to_dict(self):
+        """
+        Converts the instance to a dictionary format.
+
+        Returns:
+            dict: A dictionary containing the 'thinking' and 'answer' fields.
+        """
+        return {
+            "thinking": self.thinking,
+            "answer": self.answer,
         }
 
 

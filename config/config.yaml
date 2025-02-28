@@ -8,7 +8,7 @@ replace_abbreviations: true
 inject_whitespace: false
 # if true then go grab the saved doc
 
-experiment_name: generation_processed_content
+experiment_name: new_chunking
 
 include_context: false # for generation
 include_preceding_question_answers: true
@@ -25,4 +25,9 @@ use_original_along_with_optimized: false
 most_relevant_chunk_first: true
 summarize_retrieved_documents: false
 match_chunk_similarity_threshold: 95
-chunk_size: 512
+chunk_size: 1024
+surrounding_chunk_length: 0
+
+# Set either of the following to true or both to false
+reasoning: false
+thinking: false

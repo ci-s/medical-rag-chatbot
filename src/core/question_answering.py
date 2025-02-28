@@ -1,11 +1,17 @@
-from prompts import QUESTION_PROMPT, VIGNETTE_PROMPT, RAG_USER_PROMPT, QUESTION_PROMPT_w_REASONING
+from prompts import (
+    QUESTION_PROMPT,
+    VIGNETTE_PROMPT,
+    RAG_USER_PROMPT,
+    QUESTION_PROMPT_w_REASONING,
+    QUESTION_PROMPT_w_THINKING,
+)
 from domain.vignette import Vignette, Question
 from domain.document import Chunk
 from .utils import replace_abbreviations
 from parsing import parse_with_retry, Summary
 from settings.settings import config
 from .model import generate_response
-from parsing import get_format_instructions, Answer, ExtendedAnswer
+from parsing import get_format_instructions, Answer, ReasoningAnswer, ThinkingAnswer
 
 
 def summarize_documents(retrieved_documents: list[Chunk]) -> str:
@@ -99,7 +105,9 @@ def create_question_prompt_w_docs(retrieved_documents: Chunk, vignette: Vignette
     user_prompt, replaced_count = replace_abbreviations(user_prompt)
 
     if config.reasoning:
-        system_prompt = QUESTION_PROMPT_w_REASONING.format(format_instructions=get_format_instructions(ExtendedAnswer))
+        system_prompt = QUESTION_PROMPT_w_REASONING.format(format_instructions=get_format_instructions(ReasoningAnswer))
+    elif config.thinking:
+        system_prompt = QUESTION_PROMPT_w_THINKING.format(format_instructions=get_format_instructions(ThinkingAnswer))
     else:
         system_prompt = QUESTION_PROMPT.format(format_instructions=get_format_instructions(Answer))
     return system_prompt, user_prompt
