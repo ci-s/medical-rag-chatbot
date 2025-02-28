@@ -15,13 +15,16 @@ from langchain_core.output_parsers import BaseOutputParser
 class FaissService:
     def __init__(self):
         self.index = None
-        self.chunks = None
+        self.chunks: list[Chunk] = None
 
-    def create_index(self, chunks: list[str]):
+    def create_index(self, chunks: list[Chunk]):
         if chunks is None:
             raise ValueError("Image representations cannot be None")
 
-        embeddings = embed_chunks([chunk.text for chunk in chunks], task_type="search_document")
+        embeddings = embed_chunks(
+            [chunk.section_heading + " " + chunk.text if chunk.section_heading else chunk.text for chunk in chunks],
+            task_type="search_document",
+        )
 
         d = embeddings.shape[1]
         index = faiss.IndexFlatIP(d)  # TODO: parametrize
@@ -29,28 +32,66 @@ class FaissService:
         print("Index created with {} chunks".format(index.ntotal))
         self.index = index
         self.chunks = chunks
+        self.set_chunk_indices()
 
-    def search_index(self, query, k) -> tuple[list[float], list[Chunk]]:
-        if isinstance(query, str):
-            query_embedding = self._encode_chunks([query])
-        else:
-            query_embedding = query
-
+    def search_index(self, query_embedding, k: int) -> tuple[list[float], list[Chunk]]:
         D, I = self.index.search(query_embedding, k)
 
-        return D[0], [self.chunks[idx] for idx in I[0]]
+        retrieved_indices = set(I[0])
+        expanded_indices = set(retrieved_indices)
+
+        if config.surrounding_chunk_length > 0:
+            print("Expanding retrieved indices with surrounding chunks")
+            for idx in retrieved_indices:
+                original_section = self.chunks[idx].section_heading
+                for offset in range(1, config.surrounding_chunk_length + 1):
+                    if (
+                        0 <= idx - offset < len(self.chunks)
+                        and self.chunks[idx - offset].section_heading == original_section
+                    ):
+                        expanded_indices.add(idx - offset)
+                    if (
+                        0 <= idx + offset < len(self.chunks)
+                        and self.chunks[idx + offset].section_heading == original_section
+                    ):
+                        expanded_indices.add(idx + offset)
+
+        sorted_retrieved_chunks = [self.chunks[idx] for idx in sorted(expanded_indices)]
+        return D[0], self.merge_chunks_if_consecutive(sorted_retrieved_chunks)
+
+    def set_chunk_indices(self):
+        for i, chunk in enumerate(self.chunks):
+            chunk.index = i
+
+    def merge_chunks_if_consecutive(self, sorted_chunks: list[Chunk]) -> list[Chunk]:
+        merged_chunks = []
+        current_chunk = sorted_chunks[0].copy()
+        for i in range(1, len(sorted_chunks)):
+            next_chunk = sorted_chunks[i].copy()
+
+            if (
+                next_chunk.index == (current_chunk.index + 1)
+                and next_chunk.section_heading == current_chunk.section_heading
+            ):
+                current_chunk.text += " " + next_chunk.text
+                current_chunk.end_page = max(current_chunk.end_page, next_chunk.end_page)
+                current_chunk.index = next_chunk.index
+            else:
+                merged_chunks.append(current_chunk)
+                current_chunk = next_chunk
+
+        merged_chunks.append(current_chunk)
+
+        for chunk in merged_chunks:
+            chunk.index = None
+        return merged_chunks
 
 
 def _retrieve(query: str, faiss_service: FaissService) -> list[Chunk]:
     query, _ = replace_abbreviations(query)
     query_embedding = embed_chunks(query, task_type="search_query")
 
-    similarities, retrieved_documents = faiss_service.search_index(query_embedding, config.top_k)
-
-    # print("Retrieved documents:")
-    # for i, retrieved_document in enumerate(retrieved_documents):
-    #     print("*" * 20, f"Retrieval {i + 1} with similarity score {similarities[i]}", "*" * 20)
-    #     print(retrieved_document)
+    _, retrieved_documents = faiss_service.search_index(query_embedding, config.top_k)
 
     return retrieved_documents
 

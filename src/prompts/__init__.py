@@ -1,5 +1,5 @@
 from .evaluation import GENERATION_EVALUATION_PROMPT
-from .question import QUESTION_PROMPT, RAG_USER_PROMPT
+from .question import QUESTION_PROMPT, RAG_USER_PROMPT, QUESTION_PROMPT_w_REASONING, QUESTION_PROMPT_w_THINKING
 from .chunking import HEADINGS_PROMPT
 from .vignette import VIGNETTE_PROMPT
 from .retrieval_optimization import (

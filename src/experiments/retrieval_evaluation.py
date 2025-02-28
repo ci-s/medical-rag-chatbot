@@ -21,22 +21,24 @@ pages, _, _, _ = get_page_types()
 # toc_pages = [2, 3]
 
 document = get_document(file_path, pages)
-# toc = get_document(
-#     "/Users/cisemaltan/workspace/thesis/medical-rag-chatbot/data/MNL_VA_Handbuch_vaskulaere_Neurologie_221230.pdf",
-#     toc_pages,
-#     is_replace_abbreviations=True,
-# )
-
+# TODO: integrate mlflow
 method_args = {
     # "semantic": {},  # set NOMIC_API_KEY
-    "size": {"chunk_size": 512},
-    # "section": {"toc": toc},
+    # "section": {"toc": None},
+    "section_and_size": {"toc": None, "chunk_size": config.chunk_size},
+    "size": {"chunk_size": config.chunk_size},
 }
 
 
 result_dicts = []
 for method, args in method_args.items():
-    for optim_method in [None, "hypothetical_document", "decomposing", "paraphrasing", "stepback"]:
+    for optim_method in [
+        None,
+        "hypothetical_document",
+        "decomposing",
+        "paraphrasing",
+        "stepback",
+    ]:  # , "hypothetical_document", "decomposing", "paraphrasing", "stepback"
         if optim_method:
             config.optimization_method = optim_method
             config.use_original_query_only = False
@@ -44,10 +46,12 @@ for method, args in method_args.items():
             config.optimization_method = None
             config.use_original_query_only = True
 
+        config.chunk_method = method
         subdict = {}
         subdict["method"] = method
         subdict["optim_method"] = str(optim_method)
         subdict["config"] = config.model_dump()
+        subdict["settings"] = settings.model_dump(mode="json")
 
         print(f"Method: {method}")
         chunks = chunk_document(method=method, document=document, pages=pages, **args)
@@ -65,6 +69,6 @@ for method, args in method_args.items():
 output_file = f"retrieval_eval_{int(time.time())}.json"
 output_path = os.path.join(settings.results_path, output_file)
 with open(output_path, "w") as file:
-    json.dump(result_dicts, file, indent=4)
+    json.dump(result_dicts, file, indent=4, ensure_ascii=False)
 
 print("Results are saved in: ", output_path)

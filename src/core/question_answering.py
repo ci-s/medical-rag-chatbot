@@ -1,11 +1,17 @@
-from prompts import QUESTION_PROMPT, VIGNETTE_PROMPT, RAG_USER_PROMPT
+from prompts import (
+    QUESTION_PROMPT,
+    VIGNETTE_PROMPT,
+    RAG_USER_PROMPT,
+    QUESTION_PROMPT_w_REASONING,
+    QUESTION_PROMPT_w_THINKING,
+)
 from domain.vignette import Vignette, Question
 from domain.document import Chunk
 from .utils import replace_abbreviations
 from parsing import parse_with_retry, Summary
 from settings.settings import config
 from .model import generate_response
-from parsing import get_format_instructions, Answer
+from parsing import get_format_instructions, Answer, ReasoningAnswer, ThinkingAnswer
 
 
 def summarize_documents(retrieved_documents: list[Chunk]) -> str:
@@ -72,10 +78,23 @@ def create_question_prompt_w_docs(retrieved_documents: Chunk, vignette: Vignette
     if config.summarize_retrieved_documents:
         documents_str = summarize_documents(retrieved_documents)
     else:
-        if config.most_relevant_chunk_first:
-            documents_str = "".join([f"{document.text}\n" for document in retrieved_documents])
-        else:
-            documents_str = "".join([f"{document.text}\n" for document in retrieved_documents[::-1]])
+        documents_str = ""
+
+        for idx, document in enumerate(
+            retrieved_documents if config.most_relevant_chunk_first else retrieved_documents[::-1]
+        ):
+            page_info = (
+                f"Page {document.start_page}"
+                if document.start_page == document.end_page
+                else f"Pages {document.start_page}-{document.end_page}"
+            )
+
+            if document.section_heading:
+                documents_str += f"Document {idx + 1} (Source: [{page_info}, Section: {document.section_heading}]):\n"
+                documents_str += f'"{document.text}"\n\n'
+            else:
+                documents_str += f"Document {idx + 1} (Source: [{page_info}]):\n"
+                documents_str += f"{document.text}\n\n"
 
     user_prompt = create_user_question_prompt(vignette, question)
 
@@ -85,11 +104,18 @@ def create_question_prompt_w_docs(retrieved_documents: Chunk, vignette: Vignette
     )
     user_prompt, replaced_count = replace_abbreviations(user_prompt)
 
-    system_prompt = QUESTION_PROMPT.format(format_instructions=get_format_instructions(Answer))
+    if config.reasoning:
+        system_prompt = QUESTION_PROMPT_w_REASONING.format(format_instructions=get_format_instructions(ReasoningAnswer))
+    elif config.thinking:
+        system_prompt = QUESTION_PROMPT_w_THINKING.format(format_instructions=get_format_instructions(ThinkingAnswer))
+    else:
+        system_prompt = QUESTION_PROMPT.format(format_instructions=get_format_instructions(Answer))
     return system_prompt, user_prompt
 
 
 def create_question_prompt_w_docs_prod(retrieved_documents: Chunk, question: str) -> str:
+    # TODO: Add support for summarization and max format changes from create_question_prompt_w_docs
+    raise NotImplementedError
     if config.summarize_retrieved_documents:
         documents_str = summarize_documents(retrieved_documents)
     else:

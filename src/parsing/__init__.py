@@ -1,5 +1,7 @@
 from .models import (
     Answer,
+    ReasoningAnswer,
+    ThinkingAnswer,
     Feedback,
     Summary,
     Statements,

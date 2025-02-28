@@ -51,17 +51,33 @@ class Document:
 
 
 class Chunk:
-    def __init__(self, text, start_page, end_page):
+    def __init__(self, text, start_page, end_page, section_heading=None, index=None):
         self.text = text
+        self.index = index
         self.start_page = start_page
         self.end_page = end_page
+        self.section_heading = section_heading
 
     def __str__(self) -> str:
-        return f"Chunk from page {self.start_page} to {self.end_page}: {self.text[:150]}..."
+        if self.section_heading:
+            return f"Chunk {self.index} in section {self.section_heading}, from page {self.start_page} to {self.end_page}: {self.text[:150]}..."
+        else:
+            return f"Chunk {self.index} from page {self.start_page} to {self.end_page}: {self.text[:150]}..."
 
     def to_dict(self):
         return {
             "text": self.text,
             "start_page": self.start_page,
             "end_page": self.end_page,
+            "section_heading": self.section_heading,
+            "index": self.index,
         }
+
+    def copy(self):
+        return Chunk(
+            self.text,
+            self.start_page,
+            self.end_page,
+            self.section_heading,
+            self.index,
+        )

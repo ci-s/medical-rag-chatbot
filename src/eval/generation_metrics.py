@@ -1,7 +1,7 @@
 import json
 
 from domain.vignette import Question, Vignette
-from domain.document import Chunk
+from domain.document import Chunk, Document
 from domain.evaluation import Feedback, StatementResult, AnswerRelevanceResult
 from core.model import generate_response
 from core.embedding import embed_chunks
@@ -16,18 +16,17 @@ from parsing import (
 import numpy as np
 
 
-def llm_as_a_judge(
-    vignette: Vignette, question: Question, generated_answer: str, retrieved_documents: list[Chunk]
-) -> Feedback:
+def llm_as_a_judge(vignette: Vignette, question: Question, generated_answer: str, document: Document) -> Feedback:
     eval_prompt = GENERATION_EVALUATION_PROMPT.format(
-        instruction=f"""        
-            Related information:\n{"".join([f"{docu.text}\n" for docu in retrieved_documents])}
-
+        reference_pages=" ".join(
+            [document.get_processed_content(page_number) for page_number in question.get_reference()]
+        ),
+        question=f"""
             Background:\n{vignette.background}
             Question:\n{question.get_question()}
             """,
-        response=generated_answer,
         reference_answer=question.get_answer(),
+        generated_answer=generated_answer,
     )
 
     eval_result = generate_response(eval_prompt)

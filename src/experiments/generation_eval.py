@@ -17,6 +17,12 @@ from settings.settings import settings
 from settings import get_page_types, config
 from eval.generation import evaluate_single, evaluate_source, evaluate_ragas
 
+# TODO: do it somewhere else in init
+import mlflow
+
+mlflow.set_tracking_uri(uri="http://127.0.0.1:8080")
+mlflow.set_experiment("Phase 1 Generation")
+
 file_path = os.path.join(settings.data_path, settings.file_name)
 
 if config.text_questions_only:
@@ -24,57 +30,73 @@ if config.text_questions_only:
 else:
     pages = list(range(7, 109))
 print(f"Number of pages: {len(pages)}")
-toc_pages = [2, 3]
 
 document = get_document(file_path, pages)
-# toc = get_document(file_path, toc_pages)
-chunks = chunk_document(method="size", document=document, pages=pages, chunk_size=512)
+chunks = chunk_document(method=config.chunk_method, document=document, pages=pages, chunk_size=config.chunk_size)
 
 
 faiss_service = FaissService()
 faiss_service.create_index(chunks)
 
+chunk_configurations = [
+    ("size", 512, 0),
+    # ("size", 256, 0),
+    # ("section_and_size", 512, 0),
+    # ("section_and_size", 256, 0),
+    # ("section_and_size", 256, 1),
+    # ("section_and_size", 512, 1),
+]
 
-result_dicts = []
-for optim_method in [
-    None,
-]:  # None, "hypothetical_document", "decomposing", "paraphrasing", "stepback"
-    if optim_method:
-        config.optimization_method = optim_method
-        config.use_original_query_only = False
-    else:
-        config.optimization_method = None
-        config.use_original_query_only = True
+for custom_config in chunk_configurations:
+    result_dicts = []
+    config.chunk_method = custom_config[0]
+    config.chunk_size = custom_config[1]
+    config.surrounding_chunk_length = custom_config[2]
+    config.reasoning = True
 
-    # avg_score, all_feedbacks = evaluate_ragas("Handbuch", faiss_service, text_only=text_only)
-    avg_score, all_feedbacks = evaluate_source("Handbuch", faiss_service, text_only=config.text_questions_only)
-    tim = int(time.time())
-    # scores = []
-    # for feedback in all_feedbacks:
-    #     scores.append(float(feedback.score))
+    for optim_method in [
+        None,
+    ]:  # None, "hypothetical_document", "decomposing", "paraphrasing", "stepback"
+        if optim_method:
+            config.optimization_method = optim_method
+            config.use_original_query_only = False
+        else:
+            config.optimization_method = None
+            config.use_original_query_only = True
 
-    # counted_values = Counter(scores)
-    # std_dev = statistics.stdev(scores)
+        # avg_score, all_feedbacks = evaluate_ragas("Handbuch", faiss_service, text_only=text_only)
+        avg_score, all_feedbacks = evaluate_source(
+            "Handbuch", faiss_service, document, text_only=config.text_questions_only
+        )
+        tim = int(time.time())
 
-    result_dict = {
-        "config": config.model_dump(),
-        "all_feedbacks": [fb.to_dict() for fb in all_feedbacks],
-        "avg_score": avg_score,
-        # "std_dev": std_dev,
-        # "counted_values": counted_values,
-    }
+        result_dict = {
+            "config": config.model_dump(),
+            "settings": settings.model_dump(mode="json"),
+            "all_feedbacks": [fb.to_dict() for fb in all_feedbacks],
+            "avg_score": avg_score,
+        }
 
-    # output_file = f"generation_eval_{tim}_{config.experiment_name}_{str(optim_method)}.json"
-    # output_path = os.path.join(settings.results_path, output_file)
-    # with open(output_path, "w") as file:
-    #     json.dump(result_dict, file, indent=4)
+        output_file = f"generation_eval_{tim}_{config.experiment_name}_{str(optim_method)}.json"
+        output_path = os.path.join(settings.results_path, output_file)
+        with open(output_path, "w") as file:
+            json.dump(result_dict, file, indent=4)
 
-    result_dicts.append(result_dict)
+        with mlflow.start_run():
+            mlflow.log_params(config.model_dump())
+            mlflow.log_params(settings.model_dump(mode="json"))
+            mlflow.log_params({"num_questions": len(all_feedbacks)})
+            mlflow.log_metric("avg_score", avg_score)
+            mlflow.set_tag("name", "Reasoning")
+
+            mlflow.log_artifact(output_path)
+
+        result_dicts.append(result_dict)
 
 
 output_file = f"generation_eval_{tim}.json"
 output_path = os.path.join(settings.results_path, output_file)
 with open(output_path, "w") as file:
-    json.dump(result_dicts, file, indent=4)
+    json.dump(result_dicts, file, indent=4, ensure_ascii=False)
 
 print("Results are saved in: ", output_path)
