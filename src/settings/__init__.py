@@ -2,7 +2,7 @@ import pandas as pd
 import os
 import json
 
-from settings.settings import settings, config
+from .settings import settings, config
 from domain.vignette import VignetteCollection
 
 
@@ -73,5 +73,26 @@ elif config.inference_location == "remote":
 ABBREVIATION_DICT = get_abbreviation_dict()
 
 VIGNETTE_COLLECTION = VignetteCollection()
-VIGNETTE_COLLECTION.load_from_yaml(settings.vignettes_path)
-VIGNETTE_COLLECTION.label_text_only_questions(get_page_types()[0])
+
+if config.filter_questions:
+    if config.filter_questions_based_on == "pages":
+        if config.filter_questions == ["Text"]:
+            pages, _, _, _ = get_page_types()
+        elif config.filter_questions == ["Table"]:
+            _, _, pages, _ = get_page_types()
+        elif config.filter_questions == ["Flowchart"]:
+            _, pages, _, _ = get_page_types()
+        elif config.filter_questions == ["Text", "Table"]:  # problem, sorted?
+            text_pages, _, table_pages, _ = get_page_types()
+            pages = text_pages + table_pages
+            print("Text and Table pages: ", pages)
+        else:
+            raise ValueError("Some multiple filter_questions value are not configured for page types yet")
+        VIGNETTE_COLLECTION.load_from_yaml(
+            settings.vignettes_path, filter_categories=config.filter_questions, filter_pages=pages
+        )
+    elif config.filter_questions_based_on == "categories":
+        VIGNETTE_COLLECTION.load_from_yaml(
+            settings.vignettes_path, filter_categories=config.filter_questions, filter_pages=None
+        )
+# VIGNETTE_COLLECTION.label_text_only_questions(get_page_types()[0])

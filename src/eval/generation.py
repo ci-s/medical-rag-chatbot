@@ -99,7 +99,7 @@ def evaluate_single(
     return FeedbackResult(
         feedback=feedback.text,
         question_id=question_id,
-        reference_pages=question.get_reference(),
+        reference_pages=question.get_reference_pages(),
         score=feedback.score,
         generated_answer=generated_answer.to_dict(),
         retrieved_documents=retrieved_documents,
@@ -110,7 +110,6 @@ def evaluate_source(
     source: Literal["Handbuch", "Antibiotika"],
     faiss_service: FaissService,
     document: Document,
-    text_only: bool = False,
 ) -> tuple[int, list[FeedbackResult]]:
     all_feedbacks = []
 
@@ -118,12 +117,8 @@ def evaluate_source(
         for question in vignette.get_questions():
             if question.get_source() != source:
                 continue
-            if text_only and question.text_only:
-                all_feedbacks.append(evaluate_single(vignette.get_id(), question.get_id(), faiss_service, document))
-            elif not text_only:
-                all_feedbacks.append(evaluate_single(vignette.get_id(), question.get_id(), faiss_service, document))
-            else:
-                pass
+
+            all_feedbacks.append(evaluate_single(vignette.get_id(), question.get_id(), faiss_service, document))
 
     print(f"Questions from {source}: {len([all_feedbacks for s in all_feedbacks if s is not None])}")
 
@@ -200,7 +195,6 @@ def compute_average_scores(all_feedbacks: list[RAGASResult], score_keys: list[st
 def evaluate_ragas(
     source: Literal["Handbuch", "Antibiotika"],
     faiss_service: FaissService,
-    text_only: bool = False,
 ) -> tuple[int, list[RAGASResult]]:
     all_feedbacks = []
 
@@ -208,12 +202,7 @@ def evaluate_ragas(
         for question in vignette.get_questions():
             if question.get_source() != source:
                 continue
-            if text_only and question.text_only:
-                all_feedbacks.append(evaluate_single_w_ragas(vignette.get_id(), question.get_id(), faiss_service))
-            elif not text_only:
-                all_feedbacks.append(evaluate_single_w_ragas(vignette.get_id(), question.get_id(), faiss_service))
-            else:
-                pass
+            all_feedbacks.append(evaluate_single_w_ragas(vignette.get_id(), question.get_id(), faiss_service))
 
     print(f"Questions from {source}: {len([all_feedbacks for s in all_feedbacks if s is not None])}")
 

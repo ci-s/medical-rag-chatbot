@@ -8,16 +8,14 @@ class Question:
         id: int,
         question: str,
         answer: str,
-        reference: list[int],
+        reference: list[dict],
         source: Literal["Handbuch", "Antibiotika"],
-        text_only: bool = False,
     ) -> None:
         self.id = id
         self.question = question
         self.answer = answer
-        self.reference = reference
+        self.references = self._process_references(reference)
         self.source = source
-        self.text_only = text_only
 
     def get_id(self) -> int:
         return self.id
@@ -28,8 +26,17 @@ class Question:
     def get_answer(self) -> str:
         return self.answer
 
-    def get_reference(self) -> list[int]:
-        return self.reference
+    def get_references(self) -> dict[int, str]:
+        return self.references
+
+    def get_reference_pages(self) -> list[int]:
+        return self.references.keys()
+
+    def _process_references(self, reference_list: list[dict]):
+        """Convert reference list into a dictionary with page numbers as keys."""
+        # Before: # [{'page': 46, 'type': 'Text'}, {'page': 47, 'type': 'Text'}]
+        # After: {46: 'Text', 47: 'Text'}
+        return {ref["page"]: ref["type"] for ref in reference_list}
 
     def get_source(self) -> Literal["Handbuch", "Antibiotika"]:
         return self.source
@@ -86,12 +93,29 @@ class Vignette:
     def __str__(self) -> str:
         return f"Vignette {self.id}: \nBackground: {self.background[:100]}...\nContext: {self.context}\nQuestions: {len(self.questions)}"
 
+    def filter_vignette(self, categories: list[Literal["Text", "Table", "Flowchart"]] | None, pages: list[int] | None):
+        filtered_questions = []
+
+        for question in self.get_questions():
+            references = question.get_references()
+
+            if categories:
+                if any(source_type not in categories for _, source_type in references.items()):
+                    continue
+            if pages:
+                if any(page_number not in pages for page_number, _ in references.items()):
+                    continue
+
+            filtered_questions.append(question)
+
+        self.questions = filtered_questions
+
 
 class VignetteCollection:
     def __init__(self):
         self.vignettes: list[Vignette] = []
 
-    def load_from_yaml(self, file_path):
+    def load_from_yaml(self, file_path, filter_categories: list[str] | None, filter_pages: list[int] | None):
         with open(file_path, "r", encoding="utf-8") as file:
             data = yaml.safe_load(file)
             for vignette_data in data["vignettes"]:
@@ -102,6 +126,8 @@ class VignetteCollection:
                     questions=[Question(**q) for q in vignette_data["questions"]],
                 )
 
+                if filter_categories:
+                    vignette.filter_vignette(filter_categories, filter_pages)
                 self.vignettes.append(vignette)
 
     def get_vignettes(self) -> list[Vignette]:
@@ -112,13 +138,3 @@ class VignetteCollection:
             if vignette.id == id:
                 return vignette
         return None
-
-    def label_text_only_questions(self, text_pages) -> None:
-        id_list = []  # TODO: decide should it stay here or not
-
-        for vignette in self.vignettes:
-            for question in vignette.get_questions():
-                if all(p in text_pages for p in question.reference):
-                    question.text_only = True
-                    id_list.append(question.id)
-        print("Text only questions labeled, ids are as follows: ", id_list)

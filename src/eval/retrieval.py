@@ -10,7 +10,7 @@ from .retrieval_metrics import recall, precision
 
 
 def get_references_w_id(vignette_id, question_id) -> list[int]:
-    return VIGNETTE_COLLECTION.get_vignette_by_id(vignette_id).get_question(question_id).get_reference()
+    return VIGNETTE_COLLECTION.get_vignette_by_id(vignette_id).get_question(question_id).get_reference_pages()
 
 
 def get_references(query: str) -> list[int]:
@@ -18,7 +18,7 @@ def get_references(query: str) -> list[int]:
     for vignette in VIGNETTE_COLLECTION.vignettes:
         for question in vignette.get_questions():
             if query == question.get_question():
-                return question.get_reference()
+                return question.get_reference_pages()
 
 
 def evaluate_single(query: str, retrieved_passages: list[Chunk]) -> Stats:
@@ -31,7 +31,6 @@ def evaluate_single(query: str, retrieved_passages: list[Chunk]) -> Stats:
 def evaluate_source(
     source: Literal["Handbuch", "Antibiotika"],
     faiss_service: FaissService,
-    text_only: bool = False,
 ) -> Stats:
     all_stats = []
 
@@ -40,14 +39,8 @@ def evaluate_source(
             if question.get_source() != source:
                 continue
 
-            if text_only and question.text_only:
-                retrieved_documents = retrieve(vignette, question, faiss_service)
-                all_stats.append(evaluate_single(question.get_question(), retrieved_documents))
-            elif not text_only:
-                retrieved_documents = retrieve(vignette, question, faiss_service)
-                all_stats.append(evaluate_single(question.get_question(), retrieved_documents))
-            else:
-                pass
+            retrieved_documents = retrieve(vignette, question, faiss_service)
+            all_stats.append(evaluate_single(question.get_question(), retrieved_documents))
 
     print(f"Questions from {source}: {len([all_stats for s in all_stats if s is not None])}")
     return Stats(

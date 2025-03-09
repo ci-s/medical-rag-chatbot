@@ -32,7 +32,8 @@ class Config(BaseModel):
     inference_type: str = Field(..., description="Type of inference: exllama or ollama")
     inference_location: str = Field(..., description="Location of inference: remote or local")
     llm_path: str | None = None
-    text_questions_only: bool = True
+    filter_questions: list[str] | None = None
+    filter_questions_based_on: str | None = None
     replace_abbreviations: bool = True
     inject_whitespace: bool = True
     chunk_method: str = Field(..., description="Method to chunk the text: size, section or semantic")

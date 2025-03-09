@@ -16,7 +16,20 @@ from settings.settings import settings
 from settings import get_page_types, config
 
 file_path = os.path.join(settings.data_path, settings.file_name)
-pages, _, _, _ = get_page_types()
+
+# Added new, never tried before
+if config.filter_questions:
+    if config.filter_questions == ["Text"]:
+        pages, _, _, _ = get_page_types()
+    elif config.filter_questions == ["Table"]:
+        _, _, pages, _ = get_page_types()
+    elif config.filter_questions == ["Flowchart"]:
+        _, pages, _, _ = get_page_types()
+    else:
+        raise ValueError("Multiple filter_questions value is not configured for page types yet")
+else:
+    pages = list(range(7, 109))
+
 # pages = list(range(7, 109))
 # toc_pages = [2, 3]
 
@@ -59,7 +72,7 @@ for method, args in method_args.items():
         faiss_service = FaissService()
         faiss_service.create_index(chunks)
 
-        stats = evaluate_source("Handbuch", faiss_service, config.text_questions_only)
+        stats = evaluate_source("Handbuch", faiss_service)
         print(stats)
 
         subdict["result"] = stats.to_dict()

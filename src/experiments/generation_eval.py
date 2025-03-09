@@ -25,8 +25,15 @@ mlflow.set_experiment("Phase 1 Generation")
 
 file_path = os.path.join(settings.data_path, settings.file_name)
 
-if config.text_questions_only:
-    pages, _, _, _ = get_page_types()
+if config.filter_questions:
+    if config.filter_questions == ["Text"]:
+        pages, _, _, _ = get_page_types()
+    elif config.filter_questions == ["Table"]:
+        _, _, pages, _ = get_page_types()
+    elif config.filter_questions == ["Flowchart"]:
+        _, pages, _, _ = get_page_types()
+    else:
+        raise ValueError("Multiple filter_questions value is not configured for page types yet")
 else:
     pages = list(range(7, 109))
 print(f"Number of pages: {len(pages)}")
@@ -39,12 +46,12 @@ faiss_service = FaissService()
 faiss_service.create_index(chunks)
 
 chunk_configurations = [
-    ("size", 512, 0),
-    # ("size", 256, 0),
-    # ("section_and_size", 512, 0),
-    # ("section_and_size", 256, 0),
-    # ("section_and_size", 256, 1),
-    # ("section_and_size", 512, 1),
+    ("size", 1024, 1),
+    # ("size", 256, 3),
+    # ("section_and_size", 256, 2),
+    # ("section_and_size", 256, 3),
+    ("section_and_size", 1024, 1),
+    # ("section_and_size", 256, 3),
 ]
 
 for custom_config in chunk_configurations:
@@ -52,7 +59,7 @@ for custom_config in chunk_configurations:
     config.chunk_method = custom_config[0]
     config.chunk_size = custom_config[1]
     config.surrounding_chunk_length = custom_config[2]
-    config.reasoning = True
+    # config.reasoning = True
 
     for optim_method in [
         None,
@@ -64,10 +71,8 @@ for custom_config in chunk_configurations:
             config.optimization_method = None
             config.use_original_query_only = True
 
-        # avg_score, all_feedbacks = evaluate_ragas("Handbuch", faiss_service, text_only=text_only)
-        avg_score, all_feedbacks = evaluate_source(
-            "Handbuch", faiss_service, document, text_only=config.text_questions_only
-        )
+        # avg_score, all_feedbacks = evaluate_ragas("Handbuch", faiss_service)
+        avg_score, all_feedbacks = evaluate_source("Handbuch", faiss_service, document)
         tim = int(time.time())
 
         result_dict = {
@@ -80,23 +85,24 @@ for custom_config in chunk_configurations:
         output_file = f"generation_eval_{tim}_{config.experiment_name}_{str(optim_method)}.json"
         output_path = os.path.join(settings.results_path, output_file)
         with open(output_path, "w") as file:
-            json.dump(result_dict, file, indent=4)
+            json.dump(result_dict, file, indent=4, ensure_ascii=False)
 
         with mlflow.start_run():
             mlflow.log_params(config.model_dump())
             mlflow.log_params(settings.model_dump(mode="json"))
             mlflow.log_params({"num_questions": len(all_feedbacks)})
             mlflow.log_metric("avg_score", avg_score)
-            mlflow.set_tag("name", "Reasoning")
+            mlflow.set_tag("name", "Reverse similarity order")
 
             mlflow.log_artifact(output_path)
 
         result_dicts.append(result_dict)
+        print("Results are saved in: ", output_path)
 
 
-output_file = f"generation_eval_{tim}.json"
-output_path = os.path.join(settings.results_path, output_file)
-with open(output_path, "w") as file:
-    json.dump(result_dicts, file, indent=4, ensure_ascii=False)
+# output_file = f"generation_eval_{tim}.json"
+# output_path = os.path.join(settings.results_path, output_file)
+# with open(output_path, "w") as file:
+#     json.dump(result_dicts, file, indent=4, ensure_ascii=False)
 
-print("Results are saved in: ", output_path)
+# print("Results are saved in: ", output_path)
