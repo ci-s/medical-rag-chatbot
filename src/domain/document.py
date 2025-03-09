@@ -1,3 +1,4 @@
+from enum import Enum
 import pickle
 
 
@@ -50,19 +51,36 @@ class Document:
         print(f"Document with {len(self.pages)} pages from {self.path}")
 
 
+class ChunkType(Enum):
+    TEXT = "Text"
+    TABLE = "Table"
+    FLOWCHART = "Flowchart"
+
+
 class Chunk:
-    def __init__(self, text, start_page, end_page, section_heading=None, index=None):
+    def __init__(
+        self,
+        text,
+        start_page,
+        end_page,
+        section_heading=None,
+        index=None,
+        type: ChunkType | None = None,
+    ):
         self.text = text
         self.index = index
         self.start_page = start_page
         self.end_page = end_page
         self.section_heading = section_heading
+        self.type = type
 
     def __str__(self) -> str:
         if self.section_heading:
-            return f"Chunk {self.index} in section {self.section_heading}, from page {self.start_page} to {self.end_page}: {self.text[:150]}..."
+            return f"Chunk {self.index} ({self.type}) in section {self.section_heading}, from page {self.start_page} to {self.end_page}: {self.text[:150]}..."
         else:
-            return f"Chunk {self.index} from page {self.start_page} to {self.end_page}: {self.text[:150]}..."
+            return (
+                f"Chunk {self.index} ({self.type}) from page {self.start_page} to {self.end_page}: {self.text[:150]}..."
+            )
 
     def to_dict(self):
         return {
@@ -71,6 +89,7 @@ class Chunk:
             "end_page": self.end_page,
             "section_heading": self.section_heading,
             "index": self.index,
+            "type": self.type.value if self.type else None,
         }
 
     def copy(self):
@@ -80,4 +99,5 @@ class Chunk:
             self.end_page,
             self.section_heading,
             self.index,
+            self.type,
         )

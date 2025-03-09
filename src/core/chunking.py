@@ -9,7 +9,7 @@ from langchain_nomic import NomicEmbeddings
 from thefuzz import fuzz
 from core.model import generate_response
 from core.utils import merge_document
-from domain.document import Document, Chunk
+from domain.document import Document, Chunk, ChunkType
 from prompts import HEADINGS_PROMPT
 from settings.settings import config, settings
 
@@ -22,7 +22,7 @@ def chunk_by_size(document: Document, pages: list[int], chunk_size: int = 512, o
 
     docs = text_splitter.create_documents([document_str])
 
-    chunks = [Chunk(document.page_content, None, None) for document in docs]
+    chunks = [Chunk(document.page_content, None, None, type=ChunkType.TEXT) for document in docs]
     chunks, problem_count = match_chunks_with_pages(chunks, document, pages)
     if problem_count > 0:
         raise ValueError("Problems encountered during matchinkg chunks with pages")
@@ -33,7 +33,7 @@ def chunk_semantic(document: Document, pages: list[int]) -> list[Chunk]:
     document_str = merge_document(document, pages=pages)
     text_splitter = SemanticChunker(NomicEmbeddings(model="nomic-embed-text-v1.5"))
     chunks = text_splitter.split_text(document_str)  # or create_documents using my get_document
-    chunks = [Chunk(chunk, None, None) for chunk in chunks]
+    chunks = [Chunk(chunk, None, None, type=ChunkType.TEXT) for chunk in chunks]
     chunks, problem_count = match_chunks_with_pages(chunks, document, pages)
     if problem_count > 0:
         raise ValueError("Problems encountered during matchinkg chunks with pages")
@@ -185,7 +185,7 @@ def chunk_by_section(
 
     # This is required because adding higher level titles interfere with matching with pages
     lean_heading_sections = postprocess_sections(sections, lean=True)
-    chunks = [Chunk(section, None, None) for section in lean_heading_sections]
+    chunks = [Chunk(section, None, None, type=ChunkType.TEXT) for section in lean_heading_sections]
 
     chunks, problem_count = match_chunks_with_pages(chunks, document, pages)
     sections_with_full_hieararchy_titles = postprocess_sections(sections, lean=False)
@@ -255,9 +255,11 @@ def chunk_by_section_and_size(
         split_texts = split_into_fixed_size(section["content"], chunk_size)
         for i, sub_text in enumerate(split_texts):
             if i == 0:
-                chunks.append(Chunk(heading + "\n" + sub_text.strip(), None, None, section_heading=heading))
+                chunks.append(
+                    Chunk(heading + "\n" + sub_text.strip(), None, None, section_heading=heading, type=ChunkType.TEXT)
+                )
             else:
-                chunks.append(Chunk(sub_text, None, None, section_heading=heading))
+                chunks.append(Chunk(sub_text, None, None, section_heading=heading, type=ChunkType.TEXT))
 
     chunks, problem_count = match_chunks_with_pages(chunks, document, pages)
 
