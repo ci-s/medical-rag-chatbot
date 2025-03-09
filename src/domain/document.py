@@ -13,7 +13,7 @@ class Page:
 
 
 class Document:
-    def __init__(self, path: str):
+    def __init__(self, path: str = ""):
         self.path = path
         self.pages = []
 

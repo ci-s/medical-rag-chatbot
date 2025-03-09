@@ -37,6 +37,7 @@ def try_parse_result(response: str, model: type[BaseModel]) -> tuple[BaseModel |
     json_object = try_parse_json(response)
 
     if json_object is None:
+        print(f"Failed to extract JSON from response: {response}")
         return None, "Failed to extract JSON from response."
 
     try:
@@ -53,7 +54,7 @@ def get_format_instructions(model: type[BaseModel]) -> str:
     return f"{pretext}\n\n```\n{schema_str}\n```"
 
 
-def parse_with_retry(model: type[BaseModel], response: str, max_retries: int = 2) -> BaseModel | None:
+def parse_with_retry(model: type[BaseModel], response: str, max_retries: int = 4) -> BaseModel | None:
     for retries in range(max_retries):
         parsed, error_message = try_parse_result(response, model)
         if parsed:

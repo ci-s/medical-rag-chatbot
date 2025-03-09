@@ -92,3 +92,7 @@ class ParaphrasedGroundTruth(BaseModel):
 
 class WhitespaceInjectionResponse(BaseModel):
     processed_text: str = Field(description="The text with injected whitespace")
+
+
+class TableText(BaseModel):
+    table_texts: list[str] = Field(description="The parts of the text that contains the tables unchanged")

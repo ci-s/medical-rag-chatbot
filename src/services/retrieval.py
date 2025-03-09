@@ -1,4 +1,5 @@
 import faiss
+from typing import Callable
 
 from core.embedding import embed_chunks
 from settings.settings import config
@@ -16,13 +17,21 @@ class FaissService:
     def __init__(self):
         self.index = None
         self.chunks: list[Chunk] = None
+        self.retrieval_strings: list[str] = None
 
-    def create_index(self, chunks: list[Chunk]):
+    def create_index(
+        self,
+        chunks: list[Chunk],
+        retrieve_by: Callable[[Chunk], str] = lambda chunk: chunk.section_heading + " " + chunk.text
+        if chunk.section_heading
+        else chunk.text,
+    ):
         if chunks is None:
             raise ValueError("Image representations cannot be None")
 
+        self.retrieval_strings = [retrieve_by(chunk) for chunk in chunks]
         embeddings = embed_chunks(
-            [chunk.section_heading + " " + chunk.text if chunk.section_heading else chunk.text for chunk in chunks],
+            self.retrieval_strings,
             task_type="search_document",
         )
 
@@ -37,38 +46,45 @@ class FaissService:
     def search_index(self, query_embedding, k: int) -> tuple[list[float], list[Chunk]]:
         D, I = self.index.search(query_embedding, k)
 
-        retrieved_indices = set(I[0])
-        expanded_indices = set(retrieved_indices)
+        retrieved_indices = {idx: sim for idx, sim in zip(I[0], D[0])}
 
         if config.surrounding_chunk_length > 0:
             print("Expanding retrieved indices with surrounding chunks")
-            for idx in retrieved_indices:
+            original_indices = list(retrieved_indices.items())
+            print("Original indices: ", original_indices)
+            for idx, similarity_score in original_indices:
                 original_section = self.chunks[idx].section_heading
                 for offset in range(1, config.surrounding_chunk_length + 1):
-                    if (
-                        0 <= idx - offset < len(self.chunks)
-                        and self.chunks[idx - offset].section_heading == original_section
-                    ):
-                        expanded_indices.add(idx - offset)
-                    if (
-                        0 <= idx + offset < len(self.chunks)
-                        and self.chunks[idx + offset].section_heading == original_section
-                    ):
-                        expanded_indices.add(idx + offset)
+                    for new_idx in (idx - offset, idx + offset):
+                        if 0 <= new_idx < len(self.chunks) and self.chunks[new_idx].section_heading == original_section:
+                            # Add only if index doesn't exist or has a lower similarity score
+                            if new_idx not in retrieved_indices:
+                                retrieved_indices[new_idx] = 0
+                            elif retrieved_indices[new_idx] < similarity_score:
+                                retrieved_indices[new_idx] = similarity_score
 
-        sorted_retrieved_chunks = [self.chunks[idx] for idx in sorted(expanded_indices)]
-        return D[0], self.merge_chunks_if_consecutive(sorted_retrieved_chunks)
+            print("Expanded indices: ", retrieved_indices)
+        expanded_indices = sorted(retrieved_indices.items())
+        expanded_indices.sort(key=lambda tup: tup[0])
+        sorted_retrieved_chunks = [(self.chunks[idx], sim) for idx, sim in expanded_indices]
+        scores, returned_chunks = self.merge_chunks_if_consecutive(sorted_retrieved_chunks)
+        return scores, returned_chunks
 
     def set_chunk_indices(self):
         for i, chunk in enumerate(self.chunks):
             chunk.index = i
 
-    def merge_chunks_if_consecutive(self, sorted_chunks: list[Chunk]) -> list[Chunk]:
+    def merge_chunks_if_consecutive(self, sorted_chunks: list[tuple[Chunk, float]]) -> list[Chunk]:
         merged_chunks = []
+
+        scores = [score for _, score in sorted_chunks]
+        sorted_chunks = [chunk for chunk, _ in sorted_chunks]
         current_chunk = sorted_chunks[0].copy()
+        current_scores = [scores[0]]
+
         for i in range(1, len(sorted_chunks)):
             next_chunk = sorted_chunks[i].copy()
-
+            next_score = scores[i]
             if (
                 next_chunk.index == (current_chunk.index + 1)
                 and next_chunk.section_heading == current_chunk.section_heading
@@ -76,15 +92,55 @@ class FaissService:
                 current_chunk.text += " " + next_chunk.text
                 current_chunk.end_page = max(current_chunk.end_page, next_chunk.end_page)
                 current_chunk.index = next_chunk.index
+                current_scores.append(next_score)
             else:
-                merged_chunks.append(current_chunk)
+                merged_chunks.append((current_chunk, max(current_scores)))
                 current_chunk = next_chunk
+                current_scores = [next_score]
 
-        merged_chunks.append(current_chunk)
+        merged_chunks.append((current_chunk, max(current_scores)))
 
-        for chunk in merged_chunks:
+        # Sort by similarity score
+        merged_chunks.sort(key=lambda x: x[1], reverse=True)
+        retrieved_chunks = [chunk for chunk, _ in merged_chunks]
+        scores = [score for _, score in merged_chunks]
+
+        for chunk in retrieved_chunks:
             chunk.index = None
-        return merged_chunks
+
+        return scores, retrieved_chunks
+
+    # def add_chunks(
+    #     self,
+    #     new_chunks: list[Chunk],
+    #     retrieve_by: Callable[[Chunk], str] = lambda chunk: chunk.section_heading + " " + chunk.text
+    #     if chunk.section_heading
+    #     else chunk.text,
+    # ):
+    #     """Adds new chunks to the existing FAISS index."""
+    #     if new_chunks is None or len(new_chunks) == 0:
+    #         raise ValueError("New chunks cannot be None or empty.")
+
+    #     if self.index is None:
+    #         print("Index not found. Creating a new index...")
+    #         self.create_index(new_chunks, retrieve_by)
+    #         return
+
+    #     # Process new chunks using `retrieve_by`
+    #     new_retrieval_strings = [retrieve_by(chunk) for chunk in new_chunks]
+    #     new_embeddings = embed_chunks(new_retrieval_strings, task_type="search_document")
+
+    #     self.index.add(new_embeddings)
+
+    #     current_length = len(self.chunks)
+    #     # TODO: fix order?
+    #     self.chunks.extend(new_chunks)
+    #     self.retrieval_strings.extend(new_retrieval_strings)
+
+    #     for i, chunk in enumerate(new_chunks, start=current_length):
+    #         chunk.index = i
+
+    #     print(f"Added {len(new_chunks)} new chunks. Total chunks: {len(self.chunks)}")
 
 
 def _retrieve(query: str, faiss_service: FaissService) -> list[Chunk]:

@@ -11,5 +11,6 @@ from .models import (
     ContextRelevanceResultResponse,
     ParaphrasedGroundTruth,
     WhitespaceInjectionResponse,
+    TableText,
 )
 from .parse_try_fix import parse_with_retry, get_format_instructions
