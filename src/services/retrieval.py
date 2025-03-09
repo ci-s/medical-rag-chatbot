@@ -5,7 +5,7 @@ from core.embedding import embed_chunks
 from settings.settings import config
 from core.utils import replace_abbreviations
 from domain.vignette import Vignette, Question
-from domain.document import Chunk
+from domain.document import Chunk, ChunkType
 from core.model import generate_response
 from core.question_answering import create_user_question_prompt
 from prompts import HYPOTHETICAL_DOCUMENT_PROMPT, STEPBACK_PROMPT, DECOMPOSING_PROMPT, PARAPHRASING_PROMPT
@@ -67,6 +67,7 @@ class FaissService:
         expanded_indices = sorted(retrieved_indices.items())
         expanded_indices.sort(key=lambda tup: tup[0])
         sorted_retrieved_chunks = [(self.chunks[idx], sim) for idx, sim in expanded_indices]
+        # print("Sorted retrieved chunks as str: ", [(score, str(c)) for c, score in sorted_retrieved_chunks])
         scores, returned_chunks = self.merge_chunks_if_consecutive(sorted_retrieved_chunks)
         return scores, returned_chunks
 
@@ -85,8 +86,12 @@ class FaissService:
         for i in range(1, len(sorted_chunks)):
             next_chunk = sorted_chunks[i].copy()
             next_score = scores[i]
+
+            # No merge for tables and flowcharts
+            # If type is none, might be problematic
             if (
-                next_chunk.index == (current_chunk.index + 1)
+                next_chunk.type not in (ChunkType.TABLE, ChunkType.FLOWCHART)
+                and next_chunk.index == (current_chunk.index + 1)
                 and next_chunk.section_heading == current_chunk.section_heading
             ):
                 current_chunk.text += " " + next_chunk.text
@@ -148,7 +153,6 @@ def _retrieve(query: str, faiss_service: FaissService) -> list[Chunk]:
     query_embedding = embed_chunks(query, task_type="search_query")
 
     _, retrieved_documents = faiss_service.search_index(query_embedding, config.top_k)
-
     return retrieved_documents
 
 
@@ -240,3 +244,20 @@ def retrieve(
             retrieved_documents = _retrieve(new_query, faiss_service)
 
         return retrieved_documents
+
+
+def tables_to_chunks(tables_dict: dict[int, list[str]]):
+    return [
+        Chunk(
+            text=table,
+            start_page=int(page_number),
+            end_page=int(page_number),
+            type=ChunkType.TABLE,
+        )
+        for page_number, tables in tables_dict.items()
+        for table in tables
+    ]
+
+
+def retrieve_by_summarization():
+    

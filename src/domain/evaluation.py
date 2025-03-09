@@ -1,3 +1,6 @@
+from domain.document import Chunk  # TODO: it'd better if this wasn't here, figure out
+
+
 class Feedback:  # TODO: Add question id and/or
     def __init__(self, question_id: int, feedback: str, score: int, generated_answer: str):
         self.question_id = question_id
@@ -96,9 +99,20 @@ class ContextRelevanceResult(Feedback):
 
 
 class Stats:
-    def __init__(self, recall: float, precision: float):
+    def __init__(
+        self, question_id: int, recall: float, precision: float, retrieved_documents: list[Chunk] | None = None
+    ):
+        self.question_id = question_id
         self.recall = recall
         self.precision = precision
+        self.retrieved_documents = retrieved_documents
 
     def to_dict(self):
-        return {"recall": self.recall, "precision": self.precision}
+        return {
+            "question_id": self.question_id,
+            "recall": self.recall,
+            "precision": self.precision,
+            "retrieved_documents": [doc.to_dict() for doc in self.retrieved_documents]
+            if self.retrieved_documents
+            else None,
+        }
