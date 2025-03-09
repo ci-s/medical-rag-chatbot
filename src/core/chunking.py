@@ -275,8 +275,7 @@ def match_chunks_with_pages(
     similarity_threshold: int = config.match_chunk_similarity_threshold,
     overlap: bool = False,
 ):
-    """Works with consecutive pages only
-
+    """
     Args:
         chunks (list[Chunk]): _description_
         document (Document): _description_

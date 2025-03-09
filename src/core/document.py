@@ -45,10 +45,7 @@ def inject_whitespace_w_llm(text: str) -> str:
      Text: {text}
     """
     user_prompt = user_prompt.format(text=text)
-    response = generate_response(
-        system_prompt,
-        user_prompt,
-    )
+    response = generate_response(system_prompt, user_prompt, max_new_tokens=2048)
     parsed_response = parse_with_retry(WhitespaceInjectionResponse, response)
     return parsed_response.processed_text
 
@@ -113,11 +110,14 @@ def load_document(file_path: str, pages: list[int] = []) -> Document:
             )
     elif file_path.endswith(".pkl"):
         doc = Document.load(file_path)
-        doc = filter_document(doc, pages)
-        print("Document pages are filtered. The number of pages: ", len(doc.pages))
-        for page in pages:
-            if page not in [page.page_number for page in doc.pages]:
-                raise ValueError(f"Page {page} not found in the document.")
+        if pages:
+            doc = filter_document(doc, pages)
+            print("Document pages are filtered. The number of pages: ", len(doc.pages))
+            for page in pages:
+                if page not in [page.page_number for page in doc.pages]:
+                    raise ValueError(f"Page {page} not found in the document.")
+        else:
+            print("All pages are loaded. The number of pages: ", len(doc.pages))
     else:
         raise ValueError("Unsupported file format. Only PDF and pickle files are supported.")
 
@@ -150,3 +150,20 @@ def get_document(
     return process_document(
         document, whitespace_injection=whitespace_injection, is_replace_abbreviations=is_replace_abbreviations
     )
+
+
+def merge_document(documents: list[Document]) -> Document:
+    merged_document = Document()
+
+    for document in documents:
+        merged_document.pages.extend(document.pages)
+
+    page_numbers = [page.page_number for page in merged_document.pages]
+    duplicates = [page for page in set(page_numbers) if page_numbers.count(page) > 1]
+
+    if duplicates:
+        raise ValueError(f"Duplicate page numbers found: {duplicates}")
+
+    merged_document.pages.sort(key=lambda page: page.page_number)
+
+    return merged_document
