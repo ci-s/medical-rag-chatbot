@@ -65,7 +65,7 @@ class FeedbackResult(Feedback):
             "feedback": self.text,
             "score": self.score,
             "generated_answer": self.generated_answer,
-            "reference_pages": self.reference_pages,
+            "reference_pages": list(self.reference_pages),
             "retrieved_documents": [doc.to_dict() for doc in self.retrieved_documents],
         }
 
@@ -101,7 +101,7 @@ def evaluate_single(
         question_id=question_id,
         reference_pages=question.get_reference_pages(),
         score=feedback.score,
-        generated_answer=generated_answer.to_dict(),
+        generated_answer=generated_answer.answer,
         retrieved_documents=retrieved_documents,
     )
 
