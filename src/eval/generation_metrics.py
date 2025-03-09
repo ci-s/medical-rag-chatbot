@@ -19,7 +19,7 @@ import numpy as np
 def llm_as_a_judge(vignette: Vignette, question: Question, generated_answer: str, document: Document) -> Feedback:
     eval_prompt = GENERATION_EVALUATION_PROMPT.format(
         reference_pages=" ".join(
-            [document.get_processed_content(page_number) for page_number in question.get_reference()]
+            [document.get_processed_content(page_number) for page_number in question.get_reference_pages()]
         ),
         question=f"""
             Background:\n{vignette.background}

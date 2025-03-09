@@ -40,7 +40,7 @@ NORAG_USER_PROMPT = """
 def llm_as_a_judge(vignette: Vignette, question: Question, generated_answer: str, document: Document) -> Feedback:
     eval_prompt = GENERATION_EVALUATION_PROMPT.format(
         reference_pages=" ".join(
-            [document.get_processed_content(page_number) for page_number in question.get_reference()]
+            [document.get_processed_content(page_number) for page_number in question.get_reference_pages()]
         ),
         question=f"""
             Background:\n{vignette.background}
@@ -89,7 +89,6 @@ def evaluate_single(vignette_id: int, question_id: int, document: Document) -> F
 def evaluate_source(
     source: Literal["Handbuch", "Antibiotika"],
     document: Document,
-    text_only: bool = True,
 ) -> tuple[int, list[Feedback]]:
     all_feedbacks = []
 
@@ -99,11 +98,7 @@ def evaluate_source(
             print(f"Question: {question.get_id()}")
             if question.get_source() != source:
                 continue
-            if text_only and question.text_only:
-                print("Evaluating text only")
-                all_feedbacks.append(evaluate_single(vignette.get_id(), question.get_id(), document))
-            else:
-                pass
+            all_feedbacks.append(evaluate_single(vignette.get_id(), question.get_id(), document))
 
     print(f"Questions from {source}: {len([all_feedbacks for s in all_feedbacks if s is not None])}")
 
@@ -118,8 +113,15 @@ def evaluate_source(
 
 file_path = os.path.join(settings.data_path, settings.file_name)
 
-if config.text_questions_only:
-    pages, _, _, _ = get_page_types()
+if config.filter_questions:
+    if config.filter_questions == ["Text"]:
+        pages, _, _, _ = get_page_types()
+    elif config.filter_questions == ["Table"]:
+        _, _, pages, _ = get_page_types()
+    elif config.filter_questions == ["Flowchart"]:
+        _, pages, _, _ = get_page_types()
+    else:
+        raise ValueError("Multiple filter_questions value is not configured for page types yet")
 else:
     pages = list(range(7, 109))
 
@@ -127,7 +129,7 @@ document = get_document(file_path, pages)
 result_dict = []
 
 
-avg_score, all_feedbacks = evaluate_source("Handbuch", document, text_only=config.text_questions_only)
+avg_score, all_feedbacks = evaluate_source("Handbuch", document)
 tim = int(time.time())
 
 result_dict = {
