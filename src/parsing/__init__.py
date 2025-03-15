@@ -12,5 +12,6 @@ from .models import (
     ParaphrasedGroundTruth,
     WhitespaceInjectionResponse,
     TableText,
+    TableDescription,
 )
 from .parse_try_fix import parse_with_retry, get_format_instructions

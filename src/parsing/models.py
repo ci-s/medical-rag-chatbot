@@ -96,3 +96,7 @@ class WhitespaceInjectionResponse(BaseModel):
 
 class TableText(BaseModel):
     table_texts: list[str] = Field(description="The parts of the text that contains the tables unchanged")
+
+
+class TableDescription(BaseModel):
+    description: str = Field(description="the description of the provided table")

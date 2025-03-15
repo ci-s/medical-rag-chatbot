@@ -8,7 +8,7 @@ project_root = os.path.abspath(os.path.join(os.getcwd(), ".."))
 sys.path.append(project_root)
 
 from core.document import get_document
-from services.retrieval import FaissService, tables_to_chunks
+from services.retrieval import FaissService, tables_to_chunks, retrieve_table_by_summarization
 from core.chunking import chunk_document
 from eval.retrieval import evaluate_source
 
@@ -39,7 +39,8 @@ file_path = os.path.join(settings.data_path, settings.file_name)
 # pages = list(range(7, 109))
 # toc_pages = [2, 3]
 
-pages, _, _, _ = get_page_types()
+pages, _, table_pages, _ = get_page_types()
+pages = sorted(pages + table_pages)
 document = get_document(file_path, pages)
 method_args = {
     # "semantic": {},  # set NOMIC_API_KEY
@@ -77,8 +78,13 @@ for method, args in method_args.items():
             tables = json.load(file)
         table_chunks = tables_to_chunks(tables)
 
+        all_chunks = [(chunks[i].text, chunks[i]) for i in range(len(chunks))]
+        all_chunks += [
+            (retrieve_table_by_summarization(table_chunks[i], document), table_chunks[i])
+            for i in range(len(table_chunks))
+        ]
         faiss_service = FaissService()
-        faiss_service.create_index(chunks + table_chunks)
+        faiss_service.create_index(all_chunks)
         print("Total chunks: ", len(faiss_service.chunks))
         overall_stat, all_stats = evaluate_source("Handbuch", faiss_service)
 

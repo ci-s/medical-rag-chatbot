@@ -5,10 +5,11 @@ from core.embedding import embed_chunks
 from settings.settings import config
 from core.utils import replace_abbreviations
 from domain.vignette import Vignette, Question
-from domain.document import Chunk, ChunkType
+from domain.document import Chunk, ChunkType, Document
 from core.model import generate_response
 from core.question_answering import create_user_question_prompt
 from prompts import HYPOTHETICAL_DOCUMENT_PROMPT, STEPBACK_PROMPT, DECOMPOSING_PROMPT, PARAPHRASING_PROMPT
+from parsing import parse_with_retry, TableDescription
 
 from langchain_core.output_parsers import BaseOutputParser
 
@@ -21,7 +22,7 @@ class FaissService:
 
     def create_index(
         self,
-        chunks: list[Chunk],
+        chunks: list[Chunk] | list[tuple[str, Chunk]],
         retrieve_by: Callable[[Chunk], str] = lambda chunk: chunk.section_heading + " " + chunk.text
         if chunk.section_heading
         else chunk.text,
@@ -29,7 +30,15 @@ class FaissService:
         if chunks is None:
             raise ValueError("Image representations cannot be None")
 
-        self.retrieval_strings = [retrieve_by(chunk) for chunk in chunks]
+        if isinstance(chunks[0], Chunk):
+            self.retrieval_strings = [retrieve_by(chunk) for chunk in chunks]
+        elif isinstance(chunks[0], tuple):
+            print("Ignoring retrieve_by function for tuple input")
+            self.retrieval_strings = [text for text, _ in chunks]
+            chunks = [chunk for _, chunk in chunks]
+        else:
+            raise ValueError("Invalid input type for chunks")
+
         embeddings = embed_chunks(
             self.retrieval_strings,
             task_type="search_document",
@@ -152,7 +161,8 @@ def _retrieve(query: str, faiss_service: FaissService) -> list[Chunk]:
     query, _ = replace_abbreviations(query)
     query_embedding = embed_chunks(query, task_type="search_query")
 
-    _, retrieved_documents = faiss_service.search_index(query_embedding, config.top_k)
+    sims, retrieved_documents = faiss_service.search_index(query_embedding, config.top_k)
+    print(sims)
     return retrieved_documents
 
 
@@ -246,18 +256,69 @@ def retrieve(
         return retrieved_documents
 
 
-def tables_to_chunks(tables_dict: dict[int, list[str]]):
+def tables_to_chunks(tables_dict: dict[int, dict]):
     return [
         Chunk(
             text=table,
             start_page=int(page_number),
             end_page=int(page_number),
+            section_heading=table_dict["section_heading"],
             type=ChunkType.TABLE,
         )
-        for page_number, tables in tables_dict.items()
-        for table in tables
+        for page_number, table_dict in tables_dict.items()
+        for table in table_dict["content"]
     ]
 
+    # You'll be given a table along with the context from a medical document that clinicians use to make decisions.
 
-def retrieve_by_summarization():
+    # Given the table in text format and its context, provide a detailed description of the table in German. Then, include the table in markdown format to the description.
+
+    # Do not deviate from the specified format and respond strictly in the following JSON format:
+
+    # {
+    #     "description": "<Your description and markdown here in German>"
+    # }
+
+    # Do not say anything else. Make sure the response is a valid JSON.\n
+
+
+def retrieve_table_by_summarization(table: Chunk, document: Document):
+    system_prompt = """
+    You'll be given a table along with the context from a medical document that clinicians use to make decisions.
     
+    Given the table in text format and its context, you'll write a detailed description in German. Description requires:
+    - provide a summary first
+    - then convert the table into a paragraph
+    
+    Summary should provide an general idea what the table is about and the paragraph should cover all the information in the table.
+    
+    Do not deviate from the specified format and respond strictly in the following JSON format:
+
+    {
+        "description": "<Your summary and table in text paragraph here in German>"
+    }
+
+    Do not say anything else. Make sure the response is a valid JSON.\n
+    """
+
+    user_prompt = f"""
+        The context:\n{
+        "\n".join(
+            [
+                document.get_processed_content(page_number)
+                for page_number in range(table.start_page - 1, table.end_page + 1)
+                if document.get_processed_content(page_number) is not None
+            ]
+        )
+    }
+        
+        The table content:\n{table.text}
+        """  ## start and end page are the same for tables
+    response = generate_response(system_prompt, user_prompt)
+    try:
+        response = parse_with_retry(TableDescription, response)
+        print("Response within summarization: ", response)
+        return response.description
+    except Exception as e:
+        print("Problematic parsing:", e)
+        raise e
