@@ -10,7 +10,7 @@ project_root = os.path.abspath(os.path.join(os.getcwd(), ".."))
 sys.path.append(project_root)
 
 from core.document import get_document
-from services.retrieval import FaissService
+from services.retrieval import FaissService, tables_to_chunks, retrieve_table_by_summarization
 from core.chunking import chunk_document
 
 from settings.settings import settings
@@ -25,32 +25,48 @@ mlflow.set_experiment("Phase 1 Generation")
 
 file_path = os.path.join(settings.data_path, settings.file_name)
 
-if config.filter_questions:
-    if config.filter_questions == ["Text"]:
-        pages, _, _, _ = get_page_types()
-    elif config.filter_questions == ["Table"]:
-        _, _, pages, _ = get_page_types()
-    elif config.filter_questions == ["Flowchart"]:
-        _, pages, _, _ = get_page_types()
-    else:
-        raise ValueError("Multiple filter_questions value is not configured for page types yet")
-else:
-    pages = list(range(7, 109))
+# if config.filter_questions:
+#     if config.filter_questions == ["Text"]:
+#         pages, _, _, _ = get_page_types()
+#     elif config.filter_questions == ["Table"]:
+#         _, _, pages, _ = get_page_types()
+#     elif config.filter_questions == ["Flowchart"]:
+#         _, pages, _, _ = get_page_types()
+#     else:
+#         raise ValueError("Multiple filter_questions value is not configured for page types yet")
+# else:
+#     pages = list(range(7, 109))
+
+pages, _, table_pages, _ = get_page_types()
+pages = sorted(pages + table_pages)
 print(f"Number of pages: {len(pages)}")
 
 document = get_document(file_path, pages)
 chunks = chunk_document(method=config.chunk_method, document=document, pages=pages, chunk_size=config.chunk_size)
 
+# table chunks
+file_name = "table_texts_manual.json"
+file_path = os.path.join(settings.data_path, file_name)
+
+with open(file_path, "r") as file:
+    tables = json.load(file)
+    table_chunks = tables_to_chunks(tables)
+
+    all_chunks = [(chunks[i].text, chunks[i]) for i in range(len(chunks))]
+    all_chunks += [
+        (retrieve_table_by_summarization(table_chunks[i], document), table_chunks[i]) for i in range(len(table_chunks))
+    ]
 
 faiss_service = FaissService()
-faiss_service.create_index(chunks)
+faiss_service.create_index(all_chunks)
+print("Total chunks: ", len(faiss_service.chunks))
 
 chunk_configurations = [
-    ("size", 1024, 1),
+    ("size", 1024, 0),
     # ("size", 256, 3),
     # ("section_and_size", 256, 2),
     # ("section_and_size", 256, 3),
-    ("section_and_size", 1024, 1),
+    # ("section_and_size", 1024, 1),
     # ("section_and_size", 256, 3),
 ]
 
@@ -92,7 +108,7 @@ for custom_config in chunk_configurations:
             mlflow.log_params(settings.model_dump(mode="json"))
             mlflow.log_params({"num_questions": len(all_feedbacks)})
             mlflow.log_metric("avg_score", avg_score)
-            mlflow.set_tag("name", "Reverse similarity order")
+            mlflow.set_tag("name", config.experiment_name)
 
             mlflow.log_artifact(output_path)
 

@@ -14,6 +14,7 @@ class Settings(BaseSettings):
     data_path: Path
     prompt_path: Path
     file_name: str
+    raw_file_name: str
 
     vignettes_path: Path
 
@@ -22,6 +23,7 @@ class Settings(BaseSettings):
 
     results_path: Path
     headings_json_path: Path
+    table_texts_path: Path
 
 
 load_dotenv()

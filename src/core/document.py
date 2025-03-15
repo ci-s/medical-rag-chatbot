@@ -1,11 +1,14 @@
 from pypdf import PdfReader
 import re
 import time
+import os
+import json
 
 from domain.document import Document, Page
 from core.utils import levenshteinDistance, normalize_text, replace_abbreviations
 from core.model import generate_response
 from parsing import get_format_instructions, WhitespaceInjectionResponse, parse_with_retry
+from settings import settings, get_page_types
 
 header_pattern = r"Klinik\sund\sPoliklinik\sfür\sNeurologie"
 footer_pattern_page = r"Seite\s\d+\svon\s\d+"
@@ -167,3 +170,49 @@ def merge_document(documents: list[Document]) -> Document:
     merged_document.pages.sort(key=lambda page: page.page_number)
 
     return merged_document
+
+
+def get_text_in_table_pages() -> Document:
+    """
+    Extracts text content from pages that contain tables in a document.
+
+    This function reads table texts from a JSON file specified in the settings,
+    identifies the pages that contain tables, and removes the table content from
+    the processed content of each page in the document. The modified document
+    with only text content is then returned.
+
+    Returns:
+        Document: The document with table content removed from the specified table pages.
+    """
+    with open(settings.table_texts_path, "r") as file:
+        table_texts = json.load(file)  # dict[str, str]
+
+    _, _, table_pages, _ = get_page_types()
+    file_name = settings.raw_file_name
+    file_path = os.path.join(settings.data_path, file_name)
+    document = load_document(file_path, pages=table_pages)
+
+    table_texts = {int(k): v for k, v in table_texts.items()}
+    assert sorted(list(table_texts.keys())) == sorted(table_pages)
+
+    new_pages = []
+    for page in document.pages:
+        page_number = page.page_number
+        table_list = table_texts[page_number]
+        if page_number == 70:
+            page.processed_content = ""
+            new_pages.append(page)
+            continue
+        for table in table_list:
+            only_text_content = page.processed_content.replace(table, "")
+            try:
+                assert only_text_content != page.processed_content
+            except AssertionError:
+                print("Table not found in page content. Page number:", page_number)
+                print("Table:", table)
+                print("Page content:", page.processed_content)
+            page.processed_content = only_text_content
+        new_pages.append(page)
+
+    document.pages = new_pages
+    return document

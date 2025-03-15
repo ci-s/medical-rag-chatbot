@@ -23,6 +23,7 @@ def try_parse_json(text: str) -> dict | None:
         return parsed_response
     except json.JSONDecodeError as e:
         print(f"Failed to parse response as JSON in try_parse_json function: {e}")
+        print(f"Response: {text}")
         return text.strip()
 
 
