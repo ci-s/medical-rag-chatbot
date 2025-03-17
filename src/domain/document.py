@@ -101,3 +101,14 @@ class Chunk:
             self.index,
             self.type,
         )
+
+    @classmethod
+    def from_dict(cls, data: dict):
+        return cls(
+            text=data.get("text"),
+            start_page=data.get("start_page"),
+            end_page=data.get("end_page"),
+            section_heading=data.get("section_heading"),
+            index=data.get("index"),
+            type=ChunkType(data["type"]) if data.get("type") else None,
+        )

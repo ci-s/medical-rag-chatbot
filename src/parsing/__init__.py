@@ -13,5 +13,6 @@ from .models import (
     WhitespaceInjectionResponse,
     TableText,
     TableDescription,
+    TableMarkdown,
 )
 from .parse_try_fix import parse_with_retry, get_format_instructions

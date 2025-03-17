@@ -8,9 +8,11 @@ project_root = os.path.abspath(os.path.join(os.getcwd(), ".."))
 sys.path.append(project_root)
 
 from core.document import get_document
-from services.retrieval import FaissService, tables_to_chunks, retrieve_table_by_summarization
+from services.retrieval import FaissService, tables_to_chunks, retrieve_table_by_summarization, gather_chunks_orderly
 from core.chunking import chunk_document
 from eval.retrieval import evaluate_source
+from domain.document import ChunkType
+
 
 from settings.settings import settings
 from settings import get_page_types, config
@@ -69,20 +71,51 @@ for method, args in method_args.items():
 
         config.chunk_method = method
 
-        print(f"Method: {method}")
-        chunks = chunk_document(method=method, document=document, pages=pages, **args)
-        file_name = "table_texts_manual.json"
-        file_path = os.path.join(settings.data_path, file_name)
+        chunks_saved = False
+        if chunks_saved:
+            with open(
+                "/Users/cisemaltan/workspace/thesis/medical-rag-chatbot/results/all_chunks_dump.json", "r"
+            ) as file:
+                all_chunks_raw = json.load(file)
+                from domain.document import Chunk
+                from services.retrieval import markdown_table_for_generation
 
-        with open(file_path, "r") as file:
-            tables = json.load(file)
-        table_chunks = tables_to_chunks(tables)
+                all_chunks = [(text, Chunk.from_dict(chunk_dict)) for text, chunk_dict in all_chunks_raw]
 
-        all_chunks = [(chunks[i].text, chunks[i]) for i in range(len(chunks))]
-        all_chunks += [
-            (retrieve_table_by_summarization(table_chunks[i], document), table_chunks[i])
-            for i in range(len(table_chunks))
-        ]
+                for text, chunk in all_chunks:
+                    if chunk.type == ChunkType.TABLE:
+                        response = markdown_table_for_generation(chunk, document)
+                        chunk.text = response
+        else:
+            print(f"Method: {method}")
+            chunks = chunk_document(method=method, document=document, pages=pages, **args)
+
+            with open(settings.table_texts_path, "r") as file:
+                tables = json.load(file)
+            table_chunks = tables_to_chunks(tables)
+
+            _all_chunks = gather_chunks_orderly(chunks, table_chunks)
+            all_chunks = []
+            for chunk in _all_chunks:
+                if chunk.type == ChunkType.TEXT:
+                    all_chunks.append((chunk.text, chunk))
+                elif chunk.type == ChunkType.TABLE:
+                    all_chunks.append((retrieve_table_by_summarization(chunk, document), chunk))
+                else:
+                    raise ValueError(f"Chunk type {chunk.type} is not implemented yet.")
+
+            all_chunks_dump = [(text, chunk.to_dict()) for text, chunk in all_chunks]
+            output_file = f"all_chunks_dump_{config.experiment_name}.json"
+            output_path = os.path.join(settings.results_path, output_file)
+            with open(output_path, "w") as file:
+                json.dump(all_chunks_dump, file, indent=4, ensure_ascii=False)
+
+        all_chunks_dump = [(text, chunk.to_dict()) for text, chunk in all_chunks]
+        output_file = "all_chunks_dump_again.json"
+        output_path = os.path.join(settings.results_path, output_file)
+        with open(output_path, "w") as file:
+            json.dump(all_chunks_dump, file, indent=4, ensure_ascii=False)
+
         faiss_service = FaissService()
         faiss_service.create_index(all_chunks)
         print("Total chunks: ", len(faiss_service.chunks))

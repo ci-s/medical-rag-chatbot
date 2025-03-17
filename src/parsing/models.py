@@ -100,3 +100,7 @@ class TableText(BaseModel):
 
 class TableDescription(BaseModel):
     description: str = Field(description="the description of the provided table")
+
+
+class TableMarkdown(BaseModel):
+    markdown: str = Field(description="the markdown representation of the table")
