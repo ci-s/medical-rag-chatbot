@@ -4,7 +4,7 @@ import json
 
 from services.retrieval import FaissService, retrieve
 from core.model import generate_response
-from core.question_answering import create_question_prompt_w_docs
+from core.generation import create_question_prompt_w_docs
 from domain.evaluation import Feedback
 from domain.document import Chunk, Document
 from settings import VIGNETTE_COLLECTION

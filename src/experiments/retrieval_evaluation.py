@@ -8,8 +8,8 @@ project_root = os.path.abspath(os.path.join(os.getcwd(), ".."))
 sys.path.append(project_root)
 
 from core.document import get_document
-from services.retrieval import FaissService, tables_to_chunks, retrieve_table_by_summarization, gather_chunks_orderly
-from core.chunking import chunk_document
+from services.retrieval import FaissService, retrieve_table_by_summarization, gather_chunks_orderly
+from core.chunking import chunk_document, load_saved_chunks, tables_to_chunks, save_chunks
 from eval.retrieval import evaluate_source
 from domain.document import ChunkType
 
@@ -25,24 +25,26 @@ mlflow.set_experiment("Phase 2 Retrieval")
 
 file_path = os.path.join(settings.data_path, settings.file_name)
 
-# Added new, never tried before
-# if config.filter_questions:
-#     if config.filter_questions == ["Text"]:
-#         pages, _, _, _ = get_page_types()
-#     elif config.filter_questions == ["Table"]:
-#         _, _, pages, _ = get_page_types()
-#     elif config.filter_questions == ["Flowchart"]:
-#         _, pages, _, _ = get_page_types()
-#     else:
-#         raise ValueError("Multiple filter_questions value is not configured for page types yet")
-# else:
-#     pages = list(range(7, 109))
 
-# pages = list(range(7, 109))
-# toc_pages = [2, 3]
+if config.filter_questions:
+    if config.filter_questions == ["Text"]:
+        pages, _, _, _ = get_page_types()
+    elif config.filter_questions == ["Table"]:
+        _, _, pages, _ = get_page_types()
+    elif config.filter_questions == ["Text", "Table"]:
+        pages, _, table_pages, _ = get_page_types()
+        pages = sorted(pages + table_pages)
+    elif config.filter_questions == ["Flowchart"]:
+        _, pages, _, _ = get_page_types()
+    elif config.filter_questions == ["Text", "Table", "Flowchart"]:
+        pages, flowchart_pages, table_pages, _ = get_page_types()
+        pages = sorted(pages + table_pages + flowchart_pages)
+    else:
+        raise ValueError("This filter_questions setting is not configured for page types yet")
+else:
+    pages = list(range(7, 109))
 
-pages, _, table_pages, _ = get_page_types()
-pages = sorted(pages + table_pages)
+
 document = get_document(file_path, pages)
 method_args = {
     # "semantic": {},  # set NOMIC_API_KEY
@@ -56,8 +58,8 @@ method_args = {
 result_dicts = []
 for method, args in method_args.items():
     for optim_method in [
-        None,
-        # "hypothetical_document",
+        # None,
+        "hypothetical_document",
         # "decomposing",
         # "paraphrasing",
         # "stepback",
@@ -71,21 +73,11 @@ for method, args in method_args.items():
 
         config.chunk_method = method
 
-        chunks_saved = False
+        chunks_saved = True
         if chunks_saved:
-            with open(
-                "/Users/cisemaltan/workspace/thesis/medical-rag-chatbot/results/all_chunks_dump.json", "r"
-            ) as file:
-                all_chunks_raw = json.load(file)
-                from domain.document import Chunk
-                from services.retrieval import markdown_table_for_generation
+            print("Chunks are already saved. Loading them.")
+            all_chunks = load_saved_chunks(config.saved_chunks_path)
 
-                all_chunks = [(text, Chunk.from_dict(chunk_dict)) for text, chunk_dict in all_chunks_raw]
-
-                for text, chunk in all_chunks:
-                    if chunk.type == ChunkType.TABLE:
-                        response = markdown_table_for_generation(chunk, document)
-                        chunk.text = response
         else:
             print(f"Method: {method}")
             chunks = chunk_document(method=method, document=document, pages=pages, **args)
@@ -104,17 +96,7 @@ for method, args in method_args.items():
                 else:
                     raise ValueError(f"Chunk type {chunk.type} is not implemented yet.")
 
-            all_chunks_dump = [(text, chunk.to_dict()) for text, chunk in all_chunks]
-            output_file = f"all_chunks_dump_{config.experiment_name}.json"
-            output_path = os.path.join(settings.results_path, output_file)
-            with open(output_path, "w") as file:
-                json.dump(all_chunks_dump, file, indent=4, ensure_ascii=False)
-
-        all_chunks_dump = [(text, chunk.to_dict()) for text, chunk in all_chunks]
-        output_file = "all_chunks_dump_again.json"
-        output_path = os.path.join(settings.results_path, output_file)
-        with open(output_path, "w") as file:
-            json.dump(all_chunks_dump, file, indent=4, ensure_ascii=False)
+            save_chunks(all_chunks)
 
         faiss_service = FaissService()
         faiss_service.create_index(all_chunks)
