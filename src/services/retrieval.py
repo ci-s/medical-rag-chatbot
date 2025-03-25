@@ -7,7 +7,7 @@ from core.utils import replace_abbreviations
 from domain.vignette import Vignette, Question
 from domain.document import Chunk, ChunkType, Document
 from core.model import generate_response
-from core.question_answering import create_user_question_prompt
+from core.generation import create_user_question_prompt
 from prompts import HYPOTHETICAL_DOCUMENT_PROMPT, STEPBACK_PROMPT, DECOMPOSING_PROMPT, PARAPHRASING_PROMPT
 from parsing import parse_with_retry, TableDescription
 
@@ -256,49 +256,30 @@ def retrieve(
         return retrieved_documents
 
 
-def tables_to_chunks(tables_dict: dict[int, dict]):
-    return [
-        Chunk(
-            text=table,
-            start_page=int(page_number),
-            end_page=int(page_number),
-            section_heading=table_dict["section_heading"],
-            type=ChunkType.TABLE,
-        )
-        for page_number, table_dict in tables_dict.items()
-        for table in table_dict["content"]
-    ]
-
-    # You'll be given a table along with the context from a medical document that clinicians use to make decisions.
-
-    # Given the table in text format and its context, provide a detailed description of the table in German. Then, include the table in markdown format to the description.
-
-    # Do not deviate from the specified format and respond strictly in the following JSON format:
-
-    # {
-    #     "description": "<Your description and markdown here in German>"
-    # }
-
-    # Do not say anything else. Make sure the response is a valid JSON.\n
-
-
 def retrieve_table_by_summarization(table: Chunk, document: Document):
     system_prompt = """
-    You'll be given a table along with the context from a medical document that clinicians use to make decisions.
-    
-    Given the table in text format and its context, you'll write a detailed description in German. Description requires:
-    - provide a summary first
-    - then convert the table into a paragraph
-    
-    Summary should provide an general idea what the table is about and the paragraph should cover all the information in the table.
-    
-    Do not deviate from the specified format and respond strictly in the following JSON format:
+        You'll be given a table along with the context from a medical document that clinicians use to make decisions.
 
-    {
-        "description": "<Your summary and table in text paragraph here in German>"
-    }
+        Your task is to generate a detailed, structured, and information-rich description in German that maximizes retrieval effectiveness. Your response should include:
 
-    Do not say anything else. Make sure the response is a valid JSON.\n
+        1. A Clear Summary (2-3 sentences):  
+        - Provide a concise yet informative overview of what the table represents.  
+        - Include key medical concepts and terms clinicians might search for.  
+        - Use synonyms and alternative phrasing to capture diverse query formulations.  
+
+        2. A Detailed Table-to-Text Description:  
+        - Convert the table into a well-structured, coherent paragraph.
+        - Group related information together logically instead of listing data row by row.  
+        - Include clear relationships between values (e.g., comparisons, trends, categories).  
+        - Avoid overly mechanical repetition; use descriptive wording and natural transitions. 
+
+        Your response must follow this JSON format strictly:  
+
+        {
+            "description": "<Your summary and table-to-text conversion in German>"
+        }
+        
+        Do not say anything else. Make sure the response is a valid JSON.\n
     """
 
     user_prompt = f"""
@@ -322,3 +303,36 @@ def retrieve_table_by_summarization(table: Chunk, document: Document):
     except Exception as e:
         print("Problematic parsing:", e)
         raise e
+
+
+def gather_chunks_orderly(sorted_text_chunks: list[Chunk], sorted_table_chunks: list[Chunk]) -> list[Chunk]:
+    """Expects already sorted text and table chunks and merges them in the right order.
+
+    Args:
+        sorted_text_chunks (list[Chunk]): _description_
+        sorted_table_chunks (list[Chunk]): _description_
+
+    Returns:
+        list[Chunk]: _description_
+    """
+    merged_chunks = []
+    table_index = 0  # Track position in table_chunks
+
+    for text_chunk in sorted_text_chunks:
+        # Insert all table chunks that belong *before* this text chunk
+        while (
+            table_index < len(sorted_table_chunks)
+            and sorted_table_chunks[table_index].start_page <= text_chunk.start_page
+        ):
+            merged_chunks.append(sorted_table_chunks[table_index])
+            table_index += 1
+
+        # Insert the text chunk (maintaining its order)
+        merged_chunks.append(text_chunk)
+
+    # Add any remaining table chunks at the end
+    while table_index < len(sorted_table_chunks):
+        merged_chunks.append(sorted_table_chunks[table_index])
+        table_index += 1
+
+    return merged_chunks

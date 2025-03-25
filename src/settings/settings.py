@@ -64,6 +64,8 @@ class Config(BaseModel):
     reasoning: bool = False
     thinking: bool = False
 
+    saved_chunks_path: str | None = None
+
     def dump(self, file_path: str) -> None:
         with open(file_path, "w", encoding="utf-8") as file:
             yaml.dump(self.model_dump(), file, default_flow_style=False, allow_unicode=True)

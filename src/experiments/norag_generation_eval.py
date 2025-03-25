@@ -17,7 +17,7 @@ from domain.evaluation import Feedback
 from settings import VIGNETTE_COLLECTION
 from parsing import get_format_instructions, parse_with_retry, Answer
 from prompts import QUESTION_PROMPT
-from core.question_answering import create_user_question_prompt
+from core.generation import create_user_question_prompt
 from core.utils import replace_abbreviations
 from prompts import GENERATION_EVALUATION_PROMPT
 from parsing import Feedback as Feedback_Parsing

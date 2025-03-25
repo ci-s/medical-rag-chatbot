@@ -8,9 +8,11 @@ project_root = os.path.abspath(os.path.join(os.getcwd(), ".."))
 sys.path.append(project_root)
 
 from core.document import get_document
-from services.retrieval import FaissService, tables_to_chunks, retrieve_table_by_summarization
-from core.chunking import chunk_document
+from services.retrieval import FaissService, retrieve_table_by_summarization, gather_chunks_orderly
+from core.chunking import chunk_document, load_saved_chunks, tables_to_chunks, save_chunks
 from eval.retrieval import evaluate_source
+from domain.document import ChunkType
+
 
 from settings.settings import settings
 from settings import get_page_types, config
@@ -23,24 +25,26 @@ mlflow.set_experiment("Phase 2 Retrieval")
 
 file_path = os.path.join(settings.data_path, settings.file_name)
 
-# Added new, never tried before
-# if config.filter_questions:
-#     if config.filter_questions == ["Text"]:
-#         pages, _, _, _ = get_page_types()
-#     elif config.filter_questions == ["Table"]:
-#         _, _, pages, _ = get_page_types()
-#     elif config.filter_questions == ["Flowchart"]:
-#         _, pages, _, _ = get_page_types()
-#     else:
-#         raise ValueError("Multiple filter_questions value is not configured for page types yet")
-# else:
-#     pages = list(range(7, 109))
 
-# pages = list(range(7, 109))
-# toc_pages = [2, 3]
+if config.filter_questions:
+    if config.filter_questions == ["Text"]:
+        pages, _, _, _ = get_page_types()
+    elif config.filter_questions == ["Table"]:
+        _, _, pages, _ = get_page_types()
+    elif config.filter_questions == ["Text", "Table"]:
+        pages, _, table_pages, _ = get_page_types()
+        pages = sorted(pages + table_pages)
+    elif config.filter_questions == ["Flowchart"]:
+        _, pages, _, _ = get_page_types()
+    elif config.filter_questions == ["Text", "Table", "Flowchart"]:
+        pages, flowchart_pages, table_pages, _ = get_page_types()
+        pages = sorted(pages + table_pages + flowchart_pages)
+    else:
+        raise ValueError("This filter_questions setting is not configured for page types yet")
+else:
+    pages = list(range(7, 109))
 
-pages, _, table_pages, _ = get_page_types()
-pages = sorted(pages + table_pages)
+
 document = get_document(file_path, pages)
 method_args = {
     # "semantic": {},  # set NOMIC_API_KEY
@@ -54,8 +58,8 @@ method_args = {
 result_dicts = []
 for method, args in method_args.items():
     for optim_method in [
-        None,
-        # "hypothetical_document",
+        # None,
+        "hypothetical_document",
         # "decomposing",
         # "paraphrasing",
         # "stepback",
@@ -69,20 +73,31 @@ for method, args in method_args.items():
 
         config.chunk_method = method
 
-        print(f"Method: {method}")
-        chunks = chunk_document(method=method, document=document, pages=pages, **args)
-        file_name = "table_texts_manual.json"
-        file_path = os.path.join(settings.data_path, file_name)
+        chunks_saved = True
+        if chunks_saved:
+            print("Chunks are already saved. Loading them.")
+            all_chunks = load_saved_chunks(config.saved_chunks_path)
 
-        with open(file_path, "r") as file:
-            tables = json.load(file)
-        table_chunks = tables_to_chunks(tables)
+        else:
+            print(f"Method: {method}")
+            chunks = chunk_document(method=method, document=document, pages=pages, **args)
 
-        all_chunks = [(chunks[i].text, chunks[i]) for i in range(len(chunks))]
-        all_chunks += [
-            (retrieve_table_by_summarization(table_chunks[i], document), table_chunks[i])
-            for i in range(len(table_chunks))
-        ]
+            with open(settings.table_texts_path, "r") as file:
+                tables = json.load(file)
+            table_chunks = tables_to_chunks(tables)
+
+            _all_chunks = gather_chunks_orderly(chunks, table_chunks)
+            all_chunks = []
+            for chunk in _all_chunks:
+                if chunk.type == ChunkType.TEXT:
+                    all_chunks.append((chunk.text, chunk))
+                elif chunk.type == ChunkType.TABLE:
+                    all_chunks.append((retrieve_table_by_summarization(chunk, document), chunk))
+                else:
+                    raise ValueError(f"Chunk type {chunk.type} is not implemented yet.")
+
+            save_chunks(all_chunks)
+
         faiss_service = FaissService()
         faiss_service.create_index(all_chunks)
         print("Total chunks: ", len(faiss_service.chunks))

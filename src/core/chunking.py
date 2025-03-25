@@ -1,4 +1,5 @@
 import json
+import os
 import re
 import time
 from typing import Literal
@@ -359,3 +360,37 @@ def chunk_document(
     print("Number of chunks created: ", len(chunks))
 
     return chunks
+
+
+def tables_to_chunks(tables_dict: dict[int, dict]):
+    return [
+        Chunk(
+            text=table,
+            start_page=int(page_number),
+            end_page=int(page_number),
+            section_heading=table_dict["section_heading"],
+            type=ChunkType.TABLE,
+        )
+        for page_number, table_dict in tables_dict.items()
+        for table in table_dict["content"]
+    ]
+
+
+def save_chunks(all_chunks: list[tuple[str, Chunk]]):
+    if not all_chunks:
+        print("No chunks to save")
+        return
+
+    all_chunks_dump = [(text, chunk.to_dict()) for text, chunk in all_chunks]
+    output_file = f"all_chunks_dump_{config.experiment_name}_{int(time.time())}.json"
+    output_path = os.path.join(settings.results_path, output_file)
+    with open(output_path, "w") as file:
+        json.dump(all_chunks_dump, file, indent=4, ensure_ascii=False)
+    print(f"Chunks saved to {output_path}")
+
+
+def load_saved_chunks(file_path: str) -> list[tuple[str, Chunk]]:
+    with open(file_path, "r") as file:
+        all_chunks_raw = json.load(file)
+        all_chunks = [(text, Chunk.from_dict(chunk_dict)) for text, chunk_dict in all_chunks_raw]
+    return all_chunks

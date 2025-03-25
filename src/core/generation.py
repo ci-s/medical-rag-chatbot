@@ -6,12 +6,20 @@ from prompts import (
     QUESTION_PROMPT_w_THINKING,
 )
 from domain.vignette import Vignette, Question
-from domain.document import Chunk
+from domain.document import Chunk, Document
 from .utils import replace_abbreviations
-from parsing import parse_with_retry, Summary
 from settings.settings import config
 from .model import generate_response
-from parsing import get_format_instructions, Answer, ReasoningAnswer, ThinkingAnswer
+from parsing import (
+    parse_with_retry,
+    Summary,
+    get_format_instructions,
+    Answer,
+    ReasoningAnswer,
+    ThinkingAnswer,
+    TableDescription,
+    TableMarkdown,
+)
 
 
 def summarize_documents(retrieved_documents: list[Chunk]) -> str:
@@ -134,3 +142,73 @@ def create_question_prompt_w_docs_prod(retrieved_documents: Chunk, question: str
 
     system_prompt = QUESTION_PROMPT.format(format_instructions=get_format_instructions(Answer))
     return system_prompt, user_prompt
+
+
+def describe_table_for_generation(table: Chunk, document: Document):
+    system_prompt = """
+    You'll be given a table along with the context from a medical document that clinicians use to make decisions.
+
+    Given the table in text format and its context, you'll write a detailed description in German. Description requires:
+    - provide a summary first
+    - then convert the table into a paragraph
+
+    Summary should provide an general idea what the table is about and the paragraph should cover all the information in the table.
+
+    Do not deviate from the specified format and respond strictly in the following JSON format:
+
+    {
+        "description": "<Your summary and table in text paragraph here in German>"
+    }
+
+    Do not say anything else. Make sure the response is a valid JSON.\n
+    """
+
+    user_prompt = f"""
+        The context:\n{
+        "\n".join(
+            [
+                document.get_processed_content(page_number)
+                for page_number in range(table.start_page - 1, table.end_page + 1)
+                if document.get_processed_content(page_number) is not None
+            ]
+        )
+    }
+        
+        The table content:\n{table.text}
+        """  ## start and end page are the same for tables
+    response = generate_response(system_prompt, user_prompt)
+    try:
+        response = parse_with_retry(TableDescription, response)
+        print("Response within summarization: ", response)
+        return response.description
+    except Exception as e:
+        print("Problematic parsing:", e)
+        raise e
+
+
+def markdown_table_for_generation(table: Chunk, document: Document):
+    system_prompt = """
+    You'll be given a table from a medical document that clinicians use to make decisions. The table can contain footer notes, headers, and other formatting elements.
+
+    Given the table in text format, you'll convert it into markdown format so that it is easier to read and understand. Don't change anything in the table, just convert it into markdown format. Keep the footer notes if there are any.
+
+    Do not deviate from the specified format and respond strictly in the following JSON format:
+
+    {
+        "markdown": "<Table in markdown format here along with footer notes if there are any>"
+    }
+
+    Do not say anything else. Make sure the response is a valid JSON.\n
+    """
+
+    user_prompt = f"""
+        The table content:\n{table.text}
+        """  ## start and end page are the same for tables
+    response = generate_response(system_prompt, user_prompt)
+    try:
+        response = parse_with_retry(TableMarkdown, response)
+        print("Response within summarization: ", response)
+        return response.markdown
+    except Exception as e:
+        print("Problematic parsing:", e)
+        raise e
