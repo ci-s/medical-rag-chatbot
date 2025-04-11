@@ -8,7 +8,13 @@ project_root = os.path.abspath(os.path.join(os.getcwd(), ".."))
 sys.path.append(project_root)
 
 from core.document import get_document
-from services.retrieval import FaissService, retrieve_table_by_summarization, gather_chunks_orderly
+from services.retrieval import (
+    FaissService,
+    retrieve_table_by_summarization,
+    gather_chunks_orderly,
+    reorder_flowchart_chunks,
+    create_flowchart_chunks,
+)
 from core.chunking import chunk_document, load_saved_chunks, tables_to_chunks, save_chunks
 from eval.retrieval import evaluate_source
 from domain.document import ChunkType
@@ -23,27 +29,43 @@ import mlflow
 mlflow.set_tracking_uri(uri="http://127.0.0.1:8080")
 mlflow.set_experiment("Phase 2 Retrieval")
 
+
+#    - Take footnotes into account when relevant.
+# prompt = """You'll be given a page containing a flowchart from a medical document that clinicians use to make decisions.
+
+#     Your task is to generate a detailed description in German that maximizes retrieval effectiveness. Your response should follow these guidelines:
+
+#     - Provide a concise yet informative overview of what the flowchart represents.
+#     - Include key medical concepts and terms clinicians might search for.
+#     - Use synonyms and alternative phrasing to capture diverse query formulations.
+
+#     Your response must follow this JSON format strictly:
+
+#     {
+#         "description": "<Your overview in German in one single string>"
+#     } <END OF JSON>
+
+#     Do not say anything else. Make sure the response is a valid JSON. Stop immediately at <END OF JSON>.\n
+# """
+
+
 file_path = os.path.join(settings.data_path, settings.file_name)
 
 
-if config.filter_questions:
-    if config.filter_questions == ["Text"]:
-        pages, _, _, _ = get_page_types()
-    elif config.filter_questions == ["Table"]:
-        _, _, pages, _ = get_page_types()
-    elif config.filter_questions == ["Text", "Table"]:
-        pages, _, table_pages, _ = get_page_types()
-        pages = sorted(pages + table_pages)
-    elif config.filter_questions == ["Flowchart"]:
-        _, pages, _, _ = get_page_types()
-    elif config.filter_questions == ["Text", "Table", "Flowchart"]:
-        pages, flowchart_pages, table_pages, _ = get_page_types()
-        pages = sorted(pages + table_pages + flowchart_pages)
-    else:
-        raise ValueError("This filter_questions setting is not configured for page types yet")
-else:
-    pages = list(range(7, 109))
-
+# if config.filter_questions:
+#     text_pages, _, table_pages, _ = get_page_types()
+#     pages = []
+#     if "Text" in config.filter_questions:
+#         pages.extend(text_pages)
+#     if "Table" in config.filter_questions:
+#         pages.extend(table_pages)
+#     # No need for flowchart pages because they are processed as images
+#     pages = sorted(pages)
+# else:
+#     pages = list(range(7, 109))
+text_pages, _, table_pages, _ = get_page_types()
+pages = sorted(text_pages + table_pages)
+print(f"Number of pages: {len(pages)}")
 
 document = get_document(file_path, pages)
 method_args = {
@@ -76,8 +98,8 @@ for method, args in method_args.items():
         chunks_saved = True
         if chunks_saved:
             print("Chunks are already saved. Loading them.")
-            all_chunks = load_saved_chunks(config.saved_chunks_path)
-
+            _all_chunks = load_saved_chunks(config.saved_chunks_path)
+            all_chunks = reorder_flowchart_chunks(_all_chunks)
         else:
             print(f"Method: {method}")
             chunks = chunk_document(method=method, document=document, pages=pages, **args)
@@ -97,6 +119,12 @@ for method, args in method_args.items():
                     raise ValueError(f"Chunk type {chunk.type} is not implemented yet.")
 
             save_chunks(all_chunks)
+
+        # flowchart_directory = os.path.join(settings.data_path, "flowcharts")
+        # fchunks = create_flowchart_chunks(flowchart_directory)
+        # for fchunk in fchunks:
+        #     all_chunks.append((fchunk.text, fchunk))
+        # save_chunks(all_chunks, output_filename="flowchart_longer_hori.json")
 
         faiss_service = FaissService()
         faiss_service.create_index(all_chunks)

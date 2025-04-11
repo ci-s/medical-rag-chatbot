@@ -86,6 +86,9 @@ if config.filter_questions:
             text_pages, _, table_pages, _ = get_page_types()
             pages = text_pages + table_pages
             print("Text and Table pages: ", pages)
+        elif config.filter_questions == ["Text", "Table", "Flowchart"]:
+            text_pages, flowchart_pages, table_pages, _ = get_page_types()
+            pages = text_pages + table_pages + flowchart_pages
         else:
             raise ValueError("Some multiple filter_questions value are not configured for page types yet")
         VIGNETTE_COLLECTION.load_from_yaml(
@@ -95,4 +98,6 @@ if config.filter_questions:
         VIGNETTE_COLLECTION.load_from_yaml(
             settings.vignettes_path, filter_categories=config.filter_questions, filter_pages=None
         )
+else:
+    VIGNETTE_COLLECTION.load_from_yaml(settings.vignettes_path, filter_categories=None, filter_pages=None)
 # VIGNETTE_COLLECTION.label_text_only_questions(get_page_types()[0])

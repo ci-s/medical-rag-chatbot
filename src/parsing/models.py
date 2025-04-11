@@ -104,3 +104,11 @@ class TableDescription(BaseModel):
 
 class TableMarkdown(BaseModel):
     markdown: str = Field(description="the markdown representation of the table")
+
+
+class FlowchartDescription(BaseModel):
+    description: str = Field(description="the description of the provided flowchart")
+
+
+class TextInFlowchartPage(BaseModel):
+    text: str = Field(description="the text present outside of flowchart")

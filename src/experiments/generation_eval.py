@@ -12,9 +12,10 @@ from services.retrieval import (
     FaissService,
     retrieve_table_by_summarization,
     gather_chunks_orderly,
+    reorder_flowchart_chunks,
 )
 from core.chunking import chunk_document, load_saved_chunks, save_chunks, tables_to_chunks
-from core.generation import describe_table_for_generation, markdown_table_for_generation
+from core.generation import describe_table_for_generation
 from domain.document import ChunkType, Chunk
 
 from settings.settings import settings
@@ -29,24 +30,8 @@ mlflow.set_experiment("Phase 2 Generation")
 
 file_path = os.path.join(settings.data_path, settings.file_name)
 
-if config.filter_questions:
-    if config.filter_questions == ["Text"]:
-        pages, _, _, _ = get_page_types()
-    elif config.filter_questions == ["Table"]:
-        _, _, pages, _ = get_page_types()
-    elif config.filter_questions == ["Text", "Table"]:
-        pages, _, table_pages, _ = get_page_types()
-        pages = sorted(pages + table_pages)
-    elif config.filter_questions == ["Flowchart"]:
-        _, pages, _, _ = get_page_types()
-    elif config.filter_questions == ["Text", "Table", "Flowchart"]:
-        pages, flowchart_pages, table_pages, _ = get_page_types()
-        pages = sorted(pages + table_pages + flowchart_pages)
-    else:
-        raise ValueError("This filter_questions setting is not configured for page types yet")
-else:
-    pages = list(range(7, 109))
-
+text_pages, _, table_pages, _ = get_page_types()
+pages = sorted(text_pages + table_pages)
 print(f"Number of pages: {len(pages)}")
 
 document = get_document(file_path, pages)
@@ -55,14 +40,15 @@ chunks_saved = True
 transform_for_generation = False
 
 if chunks_saved:
-    all_chunks = load_saved_chunks(config.saved_chunks_path)
+    _all_chunks = load_saved_chunks(config.saved_chunks_path)
+    all_chunks = reorder_flowchart_chunks(_all_chunks)
 
     if transform_for_generation:
         for text, chunk in all_chunks:
             if chunk.type == ChunkType.TABLE:
                 chunk.text = describe_table_for_generation(chunk, document)
 
-    save_chunks(all_chunks)
+        save_chunks(all_chunks)
 else:
     chunks = chunk_document(method=config.chunk_method, document=document, pages=pages, chunk_size=config.chunk_size)
 
