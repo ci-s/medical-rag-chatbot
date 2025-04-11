@@ -1,15 +1,19 @@
 import faiss
 from typing import Callable
+import os
+import base64
+import requests
+import json
 
 from core.embedding import embed_chunks
-from settings.settings import config
+from settings.settings import config, settings
 from core.utils import replace_abbreviations
 from domain.vignette import Vignette, Question
 from domain.document import Chunk, ChunkType, Document
 from core.model import generate_response
 from core.generation import create_user_question_prompt
 from prompts import HYPOTHETICAL_DOCUMENT_PROMPT, STEPBACK_PROMPT, DECOMPOSING_PROMPT, PARAPHRASING_PROMPT
-from parsing import parse_with_retry, TableDescription
+from parsing import parse_with_retry, TableDescription, FlowchartDescription
 
 from langchain_core.output_parsers import BaseOutputParser
 
@@ -336,3 +340,88 @@ def gather_chunks_orderly(sorted_text_chunks: list[Chunk], sorted_table_chunks: 
         table_index += 1
 
     return merged_chunks
+
+
+def create_flowchart_chunks(flowchart_directory) -> list[Chunk]:
+    url = "http://0.0.0.0:8082/generate"
+    headers = {"Content-Type": "application/json"}
+    prompt = """You'll be given a page containing a flowchart from a medical document that clinicians use to make decisions.
+
+        Your task is to generate a detailed, structured, and information-rich description in German that maximizes retrieval effectiveness. Your response should follow these guidelines:
+
+        - Convert the flowchart into a well-structured, coherent paragraph.
+        - Group related information together logically instead of listing steps.  
+        - Include clear relationships and the order between steps and decisions.
+        - Avoid overly mechanical repetition; use descriptive wording and natural transitions. 
+
+        Your response must follow this JSON format strictly:  
+
+        {
+            "description": "<Your flowchart-to-text conversion in German in one single string>"
+        } <END OF JSON>
+        
+        Do not say anything else. Make sure the response is a valid JSON. Stop immediately at <END OF JSON>.\n
+    """
+    flowchart_directory = os.path.join(settings.data_path, "flowcharts")
+
+    flowchart_paths = []
+    for file_name in os.listdir(flowchart_directory):
+        if file_name.endswith(".png"):
+            flowchart_paths.append(os.path.join(flowchart_directory, file_name))
+
+    fchunks = []
+    for flowchart_path in flowchart_paths:
+        try:
+            page_number = int(flowchart_path.split("/")[-1].split(".")[0].replace("page", ""))
+        except Exception as e:
+            raise ValueError(f"Could not parse page number from {flowchart_path}: {e}")
+        print(f"Processing page {page_number}")
+        with open(flowchart_path, "rb") as img_file:
+            img_base64 = base64.b64encode(img_file.read()).decode("utf-8")
+
+        data = {"prompt": prompt, "max_new_tokens": 1024, "image_input": img_base64}
+
+        response = requests.post(url, headers=headers, data=json.dumps(data))
+        print("Response:", response.text)
+        try:
+            parsed_response = parse_with_retry(FlowchartDescription, response.text)
+            print("Response within summarization: ", parsed_response)
+            fchunks.append(
+                Chunk(
+                    text=parsed_response.description,
+                    start_page=page_number,
+                    end_page=page_number,
+                    type=ChunkType.FLOWCHART,
+                )
+            )
+        except Exception as e:
+            print("Problematic parsing:", e)
+            raise e
+    return fchunks
+
+
+def reorder_flowchart_chunks(all_items: list[tuple[str, Chunk]]) -> list[tuple[str, Chunk]]:
+    # Separate into flowcharts and others
+    flowcharts = [item for item in all_items if item[1].type == ChunkType.FLOWCHART]
+    others = [item for item in all_items if item[1].type != ChunkType.FLOWCHART]
+
+    # Sort flowcharts by start_page
+    flowcharts.sort(key=lambda x: x[1].start_page)
+
+    reordered = []
+    fc_index = 0
+
+    for text, chunk in others:
+        # Insert all flowcharts that belong before this chunk
+        while fc_index < len(flowcharts) and flowcharts[fc_index][1].start_page <= chunk.start_page:
+            reordered.append(flowcharts[fc_index])
+            fc_index += 1
+
+        reordered.append((text, chunk))
+
+    # Add any remaining flowcharts
+    while fc_index < len(flowcharts):
+        reordered.append(flowcharts[fc_index])
+        fc_index += 1
+
+    return reordered

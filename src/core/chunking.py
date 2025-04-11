@@ -376,14 +376,16 @@ def tables_to_chunks(tables_dict: dict[int, dict]):
     ]
 
 
-def save_chunks(all_chunks: list[tuple[str, Chunk]]):
+def save_chunks(all_chunks: list[tuple[str, Chunk]], output_filename: str = None):
     if not all_chunks:
         print("No chunks to save")
         return
 
     all_chunks_dump = [(text, chunk.to_dict()) for text, chunk in all_chunks]
-    output_file = f"all_chunks_dump_{config.experiment_name}_{int(time.time())}.json"
-    output_path = os.path.join(settings.results_path, output_file)
+
+    if not output_filename:
+        output_filename = f"all_chunks_dump_{config.experiment_name}_{int(time.time())}.json"
+    output_path = os.path.join(settings.results_path, output_filename)
     with open(output_path, "w") as file:
         json.dump(all_chunks_dump, file, indent=4, ensure_ascii=False)
     print(f"Chunks saved to {output_path}")

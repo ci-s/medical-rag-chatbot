@@ -30,6 +30,8 @@ def try_parse_json(text: str) -> dict | None:
 def prepare_json_response(text: str) -> str:
     text = text.strip()
     text = text.strip("` ")
+    text = text.strip("json")
+    text = text.strip("`")
     return text.strip()
 
 

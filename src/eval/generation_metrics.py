@@ -15,11 +15,30 @@ from parsing import (
 )
 import numpy as np
 
+from core.chunking import Chunk, load_saved_chunks
+from settings.settings import config
+
+
+def get_generated_flowchart_page_description(page_number: int, chunk_path: str | None = None) -> str:
+    print("Using chunk text for page: ", page_number)
+    if chunk_path:
+        all_chunks = load_saved_chunks(chunk_path)
+    else:
+        all_chunks: tuple[str, list[Chunk]] = load_saved_chunks(config.saved_chunks_path)
+    for text, chunk in all_chunks:
+        if chunk.start_page == page_number:
+            return text
+
 
 def llm_as_a_judge(vignette: Vignette, question: Question, generated_answer: str, document: Document) -> Feedback:
     eval_prompt = GENERATION_EVALUATION_PROMPT.format(
         reference_pages=" ".join(
-            [document.get_processed_content(page_number) for page_number in question.get_reference_pages()]
+            [
+                document.get_processed_content(page_number)
+                if document.get_processed_content(page_number)
+                else get_generated_flowchart_page_description(page_number)
+                for page_number in question.get_reference_pages()
+            ]
         ),
         question=f"""
             Background:\n{vignette.background}
