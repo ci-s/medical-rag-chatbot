@@ -98,8 +98,8 @@ for method, args in method_args.items():
         chunks_saved = True
         if chunks_saved:
             print("Chunks are already saved. Loading them.")
-            _all_chunks = load_saved_chunks(config.saved_chunks_path)
-            all_chunks = reorder_flowchart_chunks(_all_chunks)
+            all_chunks = load_saved_chunks(config.saved_chunks_path)
+            # all_chunks = reorder_flowchart_chunks(_all_chunks)
         else:
             print(f"Method: {method}")
             chunks = chunk_document(method=method, document=document, pages=pages, **args)

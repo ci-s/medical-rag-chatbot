@@ -1,7 +1,7 @@
 import json
 
 from domain.vignette import Question, Vignette
-from domain.document import Chunk, Document
+from domain.document import Chunk, ChunkType, Document
 from domain.evaluation import Feedback, StatementResult, AnswerRelevanceResult
 from core.model import generate_response
 from core.embedding import embed_chunks
@@ -27,7 +27,11 @@ def get_generated_flowchart_page_description(page_number: int, chunk_path: str |
         all_chunks: tuple[str, list[Chunk]] = load_saved_chunks(config.saved_chunks_path)
     for text, chunk in all_chunks:
         if chunk.start_page == page_number:
-            return text
+            if chunk.type != ChunkType.FLOWCHART:
+                raise ValueError(
+                    f"Chunk is not flowchart! It is {chunk.type} pages {chunk.start_page}-{chunk.end_page}"
+                )
+            return chunk.text
 
 
 def llm_as_a_judge(vignette: Vignette, question: Question, generated_answer: str, document: Document) -> Feedback:

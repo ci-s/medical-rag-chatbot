@@ -16,5 +16,6 @@ from .models import (
     TableMarkdown,
     FlowchartDescription,
     TextInFlowchartPage,
+    RewrittenQuestion,
 )
 from .parse_try_fix import parse_with_retry, get_format_instructions

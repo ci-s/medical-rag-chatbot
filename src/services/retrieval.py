@@ -4,6 +4,8 @@ import os
 import base64
 import requests
 import json
+import numpy as np
+from collections import defaultdict
 
 from core.embedding import embed_chunks
 from settings.settings import config, settings
@@ -425,3 +427,180 @@ def reorder_flowchart_chunks(all_items: list[tuple[str, Chunk]]) -> list[tuple[s
         fc_index += 1
 
     return reordered
+
+
+class HierarchicalFaissService:
+    def __init__(self):
+        self.layer1_index = None  # Index for section summaries/representations
+        self.layer2_indices = {}  # Dictionary: section_id -> FAISS index for chunks in that section
+        self.section_map = {}  # Dictionary: layer1_index_id -> section_id
+        # Store tuples of (retrieval_string, Chunk) grouped by section
+        self.chunks_by_section = defaultdict(list[tuple[str, Chunk]])
+        self.section_retrieval_strings = []  # List of strings used for layer 1 retrieval (section IDs/headings)
+
+    def _get_section_id(self, chunk: Chunk) -> str:
+        """Determines the section identifier for a chunk."""
+        # Using section_heading as the identifier. Handle cases where it might be None.
+        return chunk.section_heading if chunk.section_heading else "__DEFAULT_SECTION__"
+
+    def create_index(
+        self,
+        chunks: list[tuple[str, Chunk]],
+    ):
+        """
+        Builds a hierarchical FAISS index.
+        Layer 1 indexes section representations (using section headings).
+        Layer 2 indexes chunks within each section (using provided retrieval strings).
+        """
+        if not chunks:
+            raise ValueError("Chunks cannot be None or empty")
+
+        # --- Group chunks by section ---
+        for retrieval_string, chunk in chunks:  # Iterate through tuples
+            section_id = self._get_section_id(chunk)
+            # Store the tuple (retrieval_string, chunk)
+            self.chunks_by_section[section_id].append((retrieval_string, chunk))
+
+        print(f"Grouped chunks into {len(self.chunks_by_section)} sections.")
+
+        # --- Build Layer 1 Index (Sections) ---
+        section_ids = list(self.chunks_by_section.keys())
+        # Use section_ids (headings) directly as retrieval strings for Layer 1
+        self.section_retrieval_strings = [
+            "Dieses Kapitel beschreibt die Zielsetzung des Handbuchs als strukturierte Behandlungsanleitung für vaskuläre neurologische Erkrankungen auf der Stroke Unit am Klinikum rechts der Isar. Es basiert auf nationalen (DGN) und internationalen (ESO, AHA) Leitlinien und ergänzt diese durch lokale SOPs. Ziel ist es, die Versorgungsqualität zu verbessern, standardisierte Abläufe zu gewährleisten und Mitarbeitenden eine praxisorientierte Grundlage zu bieten.",
+            "Akutdiagnostik umfasst CCT, CTA, CTP, cMRT zur Differenzierung von Ischämie vs. Blutung, Beurteilung von Thrombolyse-/Thrombektomiekandidaten und zur Ursachensuche (TOAST-Kriterien). Weitere Maßnahmen: EKG, TTE, TEE, Duplexsonographie, Labor (inkl. Koagulation, kardiale Marker, Infektparameter), strukturierte Anamnese, Vigilanzkontrolle und standardisierte Aufnahmeprozeduren inkl. NIHSS-Score.",
+            "Kontinuierliches Monitoring von RR, HF, SpO2, EKG, Temperatur, Vigilanzzustand und neurologischem Status. Tägliche Rhythmusvisite, SRAclinic zur Arrhythmieerkennung, strukturierte Dokumentation (Vitalparameter, Infusionsraten, Perfusorlaufzeit), standardisierte SOPs zur Überwachung, Protokolle zur Delirprävention und -erkennung (DOS, CAM), Checklisten für Pflege und ärztliche Visite.",
+            "Grundmaßnahmen wie Frühmobilisation, enterale Ernährung (nach Schluckversuch), Atemtherapie (inkl. EzPAP), Thromboseprophylaxe, Stuhlregulation. Blutdruckmanagement mit Urapidil, Clonidin, Enalapril oder Clevidipin bei hypertensiven Werten, ggf. Akrinor, Noradrenalin, Dobutamin bei Hypotonie. Glukosekontrolle (Ziel: 100–160 mg%), Insulingabe s.c. oder i.v. inkl. Perfusorschema. Sauerstoffgabe bei SpO2 < 95 %, regelmäßige Blutgaskontrolle.",
+            "Systemische Thrombolyse mit rtPA (0,9 mg/kg), mechanische Thrombektomie, Behandlung der intrazerebralen Blutung (ICB) inkl. Spot-Sign-Erkennung, engmaschige RR-Kontrollen, Anlage externer Ventrikeldrainage (EVD), intraventrikuläre Lysetherapie mit rtPA (1 mg alle 8h über EVD), Liquordiagnostik 2x/Woche bei EVD (Zellzahl, Glukose, Eiweiß, Laktat, Mikrobiologie). Subarachnoidalblutung: Aneurysmaanalyse, Nimodipin, Vasospasmusprophylaxe, ICP-Kontrolle.",
+            "Rezidivvermeidung über antithrombotische Therapie (ASS, Clopidogrel, orale Antikoagulation bei VHF), Statine, Blutdrucksenkung (<130/85 mmHg), Blutzuckerkontrolle, Lifestylemodifikation. Entscheidungen gemäß TOAST-Klassifikation, Sekundärprophylaxe differenziert nach kardioembolisch, lakunär, atherothrombotisch. Anpassung der Medikation mit Blick auf Bildgebung, Laborparameter und individuelle Risikofaktoren.",
+            "Behandlung von PFO, Dissektion ACI/AV, Sinusvenenthrombose, Karotisstenose. Diagnostik mit Duplexsonographie, MRT/MRA, TEE, ggf. genetische Tests. Therapieentscheidungen basieren auf Alter, Klinik, Bildgebung und Embolierisiko. Interventionelle Verfahren wie Stenting oder PFO-Verschluss, antithrombotische Langzeittherapie individuell festgelegt.",
+            "Prophylaxe und Therapie von Pneumonie, HWI, tiefer Beinvenenthrombose (TVT), Lungenembolie (LE), epileptischen Anfällen, Delir. Einsatz von Präventionsbögen, strukturierte Vigilanzüberwachung, Osmotherapie bei Hirndruck (z.B. Mannitol, Hyperton-NaCl), neurochirurgische Konsile bei Raumforderungen, Fixierungsprotokolle, Protokoll für Antiepileptikagabe (Levetiracetam, Valproat, Lorazepam, Midazolam).",
+            "Therapiezielklärung, Patientenwille, Dokumentation (DNR/DNI). Symptomorientierte Behandlung von Dyspnoe (Morphin, Benzodiazepine), Schmerzen (Metamizol, Morphin, Fentanyl), terminalem Rasseln (Buscopan, Scopolamin), Delir (Haloperidol, Quetiapin), Anfällen. Verzicht auf nicht lebensverlängernde Maßnahmen, individuelle Sedierung. Hygienemaßnahmen, Kommunikation mit Angehörigen, Einsatz von Seelsorge.",
+            "Strukturierte Einarbeitung über SOPs, Checklisten, ärztliche und pflegerische Schulungen. Dokumentation inkl. Verlaufsbögen, Übergaben, Arztbriefvorlagen, Qualitätsmanagement mit definierten Standards (Monitoring, Mobilisation, Therapieumstellung). Interdisziplinäre Kommunikation, strukturierte Visiten, Delegation von Aufgaben, strukturierter Wissenstransfer an neue Mitarbeitende.",
+        ]
+        # section_ids
+
+        if not self.section_retrieval_strings:
+            raise ValueError("Could not determine any section IDs for Layer 1.")
+
+        # Embed section headings/IDs
+        section_embeddings = embed_chunks(
+            self.section_retrieval_strings,
+            task_type="search_document",  # Appropriate for representing document sections
+        )
+
+        if section_embeddings is None or section_embeddings.shape[0] == 0:
+            raise ValueError("Failed to generate embeddings for sections.")
+
+        d = section_embeddings.shape[1]
+        self.layer1_index = faiss.IndexFlatIP(d)
+        self.layer1_index.add(section_embeddings)
+
+        # Map layer 1 index ID back to section ID
+        for i, section_id in enumerate(section_ids):
+            self.section_map[i] = section_id
+
+        print(f"Layer 1 index created with {self.layer1_index.ntotal} sections.")
+
+        # --- Build Layer 2 Indices (Chunks within Sections) ---
+        for section_id, section_chunk_tuples in self.chunks_by_section.items():
+            # Extract pre-computed retrieval strings from the tuples
+            chunk_retrieval_strings = [rs for rs, chunk in section_chunk_tuples]
+
+            if not chunk_retrieval_strings:
+                print(f"Warning: No retrieval strings found for section '{section_id}'. Skipping L2 index creation.")
+                continue
+
+            # Embed the provided chunk retrieval strings
+            chunk_embeddings = embed_chunks(
+                chunk_retrieval_strings,
+                task_type="search_document",
+            )
+
+            if chunk_embeddings is None or chunk_embeddings.shape[0] == 0:
+                print(
+                    f"Warning: Failed to generate embeddings for chunks in section '{section_id}'. Skipping L2 index creation."
+                )
+                continue
+
+            d_chunk = chunk_embeddings.shape[1]
+            layer2_index = faiss.IndexFlatIP(d_chunk)
+            layer2_index.add(chunk_embeddings)
+            self.layer2_indices[section_id] = layer2_index
+            # No need to store l2_index in metadata, rely on list order within section
+
+        print(f"Layer 2 indices created for {len(self.layer2_indices)} sections.")
+
+    def search_index(
+        self, query_embedding: np.ndarray, k: int = 5, k1_sections: int = 2
+    ) -> tuple[list[float], list[Chunk]]:
+        """
+        Searches the hierarchical index.
+        1. Search Layer 1 for relevant sections.
+        2. Search Layer 2 within those sections for relevant chunks.
+        3. Combine and rank results.
+        """
+        if self.layer1_index is None:
+            raise ValueError("Index has not been created yet.")
+        if query_embedding.ndim == 1:
+            query_embedding = np.expand_dims(query_embedding, axis=0)  # FAISS expects 2D array
+
+        # --- Search Layer 1 ---
+        # Search L1 using the query embedding to find relevant sections
+        D1, I1 = self.layer1_index.search(query_embedding, k1_sections)
+        top_section_indices = I1[0]
+
+        all_results = []
+
+        # --- Search Layer 2 for each top section ---
+        for l1_index_id in top_section_indices:
+            if l1_index_id == -1:  # Faiss returns -1 for no results
+                continue
+            section_id = self.section_map.get(l1_index_id)
+            if section_id is None or section_id not in self.layer2_indices:
+                print(f"Warning: Section ID for L1 index {l1_index_id} not found or has no L2 index.")
+                continue
+
+            layer2_index = self.layer2_indices[section_id]
+            print(f"Retrieved section: {section_id}")
+            # Get the list of (retrieval_string, Chunk) tuples for this section
+            section_chunk_tuples = self.chunks_by_section[section_id]
+            # Extract just the Chunk objects for retrieval mapping
+            section_chunks = [chunk for rs, chunk in section_chunk_tuples]
+
+            if not section_chunks:
+                print(f"Warning: No chunks found for section '{section_id}' during search.")
+                continue
+
+            # Search within the section's L2 index using the query embedding
+            k2_chunks = max(k, 5)  # Retrieve enough chunks from relevant sections
+            D2, I2 = layer2_index.search(query_embedding, k2_chunks)
+
+            for l2_index_id, score in zip(I2[0], D2[0]):
+                if l2_index_id == -1:
+                    continue
+                # Find the original chunk using the index within the section's chunk list
+                if 0 <= l2_index_id < len(section_chunks):
+                    original_chunk = section_chunks[l2_index_id]
+                    all_results.append((score, original_chunk))
+                else:
+                    print(
+                        f"Warning: Invalid L2 index {l2_index_id} for section '{section_id}' with size {len(section_chunks)}."
+                    )
+                    # Skip this result as the index is out of bounds
+
+        # --- Combine and Rank Results ---
+        # Sort all collected chunks by similarity score (descending)
+        all_results.sort(key=lambda x: x[0], reverse=True)
+
+        # Return top k overall chunks and their scores
+        top_k_results = all_results[:k]
+        final_scores = [score for score, chunk in top_k_results]
+        final_chunks = [chunk for score, chunk in top_k_results]
+
+        return final_scores, final_chunks
+
+
+# You might need to adapt the main `retrieve` function and other parts
+# of your code to use `HierarchicalFaissService` instead of `FaissService`
+# and potentially adjust how queries are embedded if needed.
