@@ -82,7 +82,7 @@ def create_user_question_prompt(vignette: Vignette, question: Question) -> str:
     )
 
 
-def create_question_prompt_w_docs(retrieved_documents: Chunk, vignette: Vignette, question: Question) -> str:
+def create_question_prompt_w_docs(retrieved_documents: list[Chunk], vignette: Vignette, question: Question) -> str:
     if config.summarize_retrieved_documents:
         documents_str = summarize_documents(retrieved_documents)
     else:

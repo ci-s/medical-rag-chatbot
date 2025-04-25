@@ -34,15 +34,22 @@ class Question:
 
     def _process_references(self, reference_list: list[dict]):
         """Convert reference list into a dictionary with page numbers as keys."""
-        # Before: # [{'page': 46, 'type': 'Text'}, {'page': 47, 'type': 'Text'}]
-        # After: {46: 'Text', 47: 'Text'}
         return {ref["page"]: ref["type"] for ref in reference_list}
 
     def get_source(self) -> Literal["Handbuch", "Antibiotika"]:
         return self.source
 
     def __str__(self) -> str:
-        return f"Question {self.id}: Question: {self.question[:100]}... \nAnswer: {self.answer} \nReference: {self.reference} \nSource: {self.source}"
+        return f"Question {self.id}: Question: {self.question[:100]}... \nAnswer: {self.answer} \nReference: {self.references} \nSource: {self.source}"
+
+    def to_dict(self) -> dict:
+        return {
+            "id": self.id,
+            "question": self.question,
+            "answer": self.answer,
+            "reference": [{"page": k, "type": v} for k, v in self.references.items()],
+            "source": self.source,
+        }
 
 
 class Vignette:
@@ -110,6 +117,14 @@ class Vignette:
 
         self.questions = filtered_questions
 
+    def to_dict(self) -> dict:
+        return {
+            "id": self.id,
+            "background": self.background,
+            "context": self.context,
+            "questions": [q.to_dict() for q in self.questions] if self.questions else [],
+        }
+
 
 class VignetteCollection:
     def __init__(self):
@@ -138,3 +153,8 @@ class VignetteCollection:
             if vignette.id == id:
                 return vignette
         return None
+
+    def save_to_yaml(self, file_path: str) -> None:
+        data = {"vignettes": [v.to_dict() for v in self.vignettes]}
+        with open(file_path, "w", encoding="utf-8") as f:
+            yaml.safe_dump(data, f, allow_unicode=True, sort_keys=False)

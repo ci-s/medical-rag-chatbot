@@ -7,11 +7,16 @@ from core.model import generate_response
 from core.generation import create_question_prompt_w_docs
 from domain.evaluation import Feedback
 from domain.document import Chunk, Document
-from settings import VIGNETTE_COLLECTION
-from .generation_metrics import llm_as_a_judge, faithfulness, answer_relevance
+from settings import VIGNETTE_COLLECTION, get_page_types
+from .generation_metrics import llm_as_a_judge, faithfulness, answer_relevance, get_generated_flowchart_page_description
 from .retrieval_metrics import context_relevance
 from parsing import Answer, parse_with_retry, ReasoningAnswer, ThinkingAnswer
-from settings.settings import config
+from settings.settings import config, settings
+from core.chunking import tables_to_chunks
+
+with open(settings.table_texts_path, "r") as file:
+    tables = json.load(file)
+table_chunks = tables_to_chunks(tables)
 
 
 class RAGASResult:
@@ -75,6 +80,7 @@ def evaluate_single(
     question_id: int,
     faiss_service: FaissService,
     document: Document,
+    use_references_directly: bool = False,
 ) -> FeedbackResult:
     vignette = VIGNETTE_COLLECTION.get_vignette_by_id(vignette_id)
     questions = vignette.get_questions()
@@ -84,8 +90,37 @@ def evaluate_single(
         return None
 
     question = vignette.get_question(question_id)
+    if not use_references_directly:
+        retrieved_documents = retrieve(vignette, question, faiss_service)
+    else:
+        retrieved_documents = [
+            Chunk(
+                text=document.get_processed_content(page_number),
+                start_page=page_number,
+                end_page=page_number,
+                index=None,
+            )
+            if document.get_processed_content(page_number)
+            else Chunk(
+                text=get_generated_flowchart_page_description(page_number),
+                start_page=page_number,
+                end_page=page_number,
+                index=None,
+            )
+            for page_number in question.get_reference_pages()
+        ]
 
-    retrieved_documents = retrieve(vignette, question, faiss_service)
+        _, _, table_pages, _ = get_page_types()
+        for page_number in question.get_reference_pages():
+            if page_number in table_pages:
+                print(f"Page {page_number} is a table page")
+                for chunk in table_chunks:
+                    if chunk.start_page == page_number:
+                        retrieved_documents.append(chunk)
+                        break
+
+    print(f"# of Retrieved documents: {len(retrieved_documents)}")
+    print(f"Retrieved docs: {[doc.__str__() for doc in retrieved_documents]}")
     system_prompt, user_prompt = create_question_prompt_w_docs(retrieved_documents, vignette, question)
     generated_answer = generate_response(system_prompt, user_prompt)
     if config.reasoning:
@@ -110,6 +145,7 @@ def evaluate_source(
     source: Literal["Handbuch", "Antibiotika"],
     faiss_service: FaissService,
     document: Document,
+    use_references_directly: bool = False,
 ) -> tuple[int, list[FeedbackResult]]:
     all_feedbacks = []
 
@@ -118,7 +154,9 @@ def evaluate_source(
             if question.get_source() != source:
                 continue
 
-            all_feedbacks.append(evaluate_single(vignette.get_id(), question.get_id(), faiss_service, document))
+            all_feedbacks.append(
+                evaluate_single(vignette.get_id(), question.get_id(), faiss_service, document, use_references_directly)
+            )
 
     print(f"Questions from {source}: {len([all_feedbacks for s in all_feedbacks if s is not None])}")
 

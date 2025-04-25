@@ -112,3 +112,7 @@ class FlowchartDescription(BaseModel):
 
 class TextInFlowchartPage(BaseModel):
     text: str = Field(description="the text present outside of flowchart")
+
+
+class RewrittenQuestion(BaseModel):
+    question: str = Field(description="the rewritten question")
