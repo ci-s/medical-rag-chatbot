@@ -123,14 +123,26 @@ def create_question_prompt_w_docs(retrieved_documents: list[Chunk], vignette: Vi
 
 def create_question_prompt_w_docs_prod(retrieved_documents: Chunk, question: str) -> str:
     # TODO: Add support for summarization and max format changes from create_question_prompt_w_docs
-    raise NotImplementedError
     if config.summarize_retrieved_documents:
         documents_str = summarize_documents(retrieved_documents)
     else:
-        if config.most_relevant_chunk_first:
-            documents_str = "".join([f"{document.text}\n" for document in retrieved_documents])
-        else:
-            documents_str = "".join([f"{document.text}\n" for document in retrieved_documents[::-1]])
+        documents_str = ""
+
+        for idx, document in enumerate(
+            retrieved_documents if config.most_relevant_chunk_first else retrieved_documents[::-1]
+        ):
+            page_info = (
+                f"Page {document.start_page}"
+                if document.start_page == document.end_page
+                else f"Pages {document.start_page}-{document.end_page}"
+            )
+
+            if document.section_heading:
+                documents_str += f"Document {idx + 1} (Source: [{page_info}, Section: {document.section_heading}]):\n"
+                documents_str += f'"{document.text}"\n\n'
+            else:
+                documents_str += f"Document {idx + 1} (Source: [{page_info}]):\n"
+                documents_str += f"{document.text}\n\n"
 
     user_prompt = f"Question: {question}\n"
 
@@ -138,9 +150,14 @@ def create_question_prompt_w_docs_prod(retrieved_documents: Chunk, question: str
         retrieved_documents=documents_str,
         user_prompt=user_prompt,
     )
-    user_prompt, replaced_count = replace_abbreviations(user_prompt)
+    user_prompt, _ = replace_abbreviations(user_prompt)
 
-    system_prompt = QUESTION_PROMPT.format(format_instructions=get_format_instructions(Answer))
+    if config.reasoning:
+        system_prompt = QUESTION_PROMPT_w_REASONING.format(format_instructions=get_format_instructions(ReasoningAnswer))
+    elif config.thinking:
+        system_prompt = QUESTION_PROMPT_w_THINKING.format(format_instructions=get_format_instructions(ThinkingAnswer))
+    else:
+        system_prompt = QUESTION_PROMPT.format(format_instructions=get_format_instructions(Answer))
     return system_prompt, user_prompt
 
 
