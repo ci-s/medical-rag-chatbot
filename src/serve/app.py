@@ -20,7 +20,7 @@ from settings import settings, config
 from core.chunking import load_saved_chunks
 from services.retrieval import FaissService, _retrieve, reorder_flowchart_chunks
 from enum import Enum
-from services.question_answering import generate_rag_answer
+from services.question_answering import generate_rag_answer, generate_followup_questions_if_needed
 
 _all_chunks = load_saved_chunks(config.saved_chunks_path)
 all_chunks = reorder_flowchart_chunks(_all_chunks)
@@ -33,7 +33,7 @@ class ConversationState(Enum):
     WAITING_FOR_USER = 1
     FINISHED = 2
 
-    
+
 class Conversation:
     def __init__(self, id: str, state: ConversationState, text: str, details: list, answers: list):
         self.id = id
@@ -48,23 +48,39 @@ class Conversation:
             "state": self.state.value,
             "text": self.text,
             "details": self.details,
-            "answers": self.answers # [answer.to_dict() for answer in self.answers]
+            "answers": self.answers,  # [answer.to_dict() for answer in self.answers]
         }
-        
+
+
 class DetailUpdatePayload(BaseModel):
-    value: Any # Use Any to allow different types of detail values
+    data: Any  # Use Any to allow different types of detail values
 
 
 async def generate_quick_answer(question: str, on_update, on_finish):
-    generated_answer, references = generate_rag_answer(question, faiss_service)
-    on_update(generated_answer, references)
+    followup_question = generate_followup_questions_if_needed(question, faiss_service)
+
+    if followup_question is not None:
+        form_detail = {
+            "id": "druckverband-dauer-art-zugang",  # Ideally make this dynamic later
+            "type": "form",
+            "template": {
+                "text": followup_question.follow_up_question,
+                "fields": {"art": {"type": "select", "label": "Please select.", "options": followup_question.options}},
+            },
+        }
+        on_update(None, None, form_detail)
+    else:
+        # No follow-up needed → generate final answer immediately
+        generated_answer, references = generate_rag_answer(question, faiss_service)
+        on_update(generated_answer, references)
 
     on_finish()
+
 
 class ConversationService:
     last_conversation_id = 0
     conversations = dict()
-    
+
     async def create_conversation(self, question: str, previous_question: str) -> tuple[str, str | None]:
         self.last_conversation_id += 1
         id = self.last_conversation_id
@@ -72,90 +88,92 @@ class ConversationService:
         quick_answer = {
             "type": "quick",
             "text": "",
-            "reference": {
-            "type": "pdf",
-            "document": "handbuch.pdf",
-            "page": 12
-            }
+            # "reference": {"type": "pdf", "document": "handbuch.pdf", "page": 12},
         }
-        
+
         conversation = Conversation(
-            id=id,
-            state=ConversationState.GENERATING,
-            text=question,
-            details=[],
-            answers=[quick_answer]
+            id=id, state=ConversationState.GENERATING, text=question, details=[], answers=[quick_answer]
         )
         conversation = conversation.to_dict()
         self.conversations[str(id)] = conversation
-        
-        
-        def on_update(generated_answer: str, references: dict):
-            quick_answer["text"] = generated_answer
-            quick_answer["references"] = [
-                {
-                    "type": "pdf",
-                    "document": "handbuch.pdf",
-                    "page": page
-                }
-                for page, chunk_type in references.items()
-            ]
-        
+
+        def on_update(generated_answer: str | None, references: dict | None, form_detail: dict = None):
+            if generated_answer:
+                quick_answer["text"] = generated_answer
+            if references:
+                quick_answer["references"] = [
+                    {"type": "pdf", "document": "handbuch.pdf", "page": page} for page, chunk_type in references.items()
+                ]
+            if form_detail:
+                conversation["details"] = [form_detail]
+
+            if not generated_answer and not form_detail:
+                generated_answer = "Sorry there has been a problem with your request."
+                quick_answer["text"] = generated_answer
+
         def on_finish():
-            conversation["state"] = ConversationState.FINISHED.value
-            
+            if conversation["details"]:
+                conversation["state"] = ConversationState.WAITING_FOR_USER.value
+            else:
+                conversation["state"] = ConversationState.FINISHED.value
+
         await generate_quick_answer(question, on_update, on_finish)
         return id, None
-    
+
     def get_conversation(self, id: str) -> dict | None:
         if id in self.conversations:
             return self.conversations[id]
         else:
             return None
-        
-    async def update_conversation_detail(self, conversation_id: str, detail_id: str, value: Any) -> dict:
-        conversation = self.conversations.get(conversation_id)
-        if not conversation:
-            raise HTTPException(status_code=404, detail="Conversation not found")
 
-        # Find the required detail by id
-        detail_index = -1
-        for i, detail in enumerate(conversation.required_details):
-            if detail.get("id") == detail_id:
-                detail_index = i
-                break
-        
-        if detail_index == -1:
-             raise HTTPException(status_code=404, detail=f"Detail with id '{detail_id}' not found or not required for this conversation")
+    def update_conversation_detail(self, conversation_id: str, detail_id: str, value: Any) -> dict | None:
+        conversation = conversation_service.get_conversation(conversation_id)
+        for detail in conversation["details"]:
+            if "template" in detail:
+                if detail["id"] == detail_id:
+                    # Update the value in the details
+                    detail["template"]["selected_value"] = value
+                    break
 
-        # Store the submitted value (optional, depends on your logic)
-        conversation.details.append({"id": detail_id, "value": value})
+        original_question = conversation["text"]
+        augmented_question = self.augment_question_with_details(original_question, conversation["details"])
+        generated_answer, references = generate_rag_answer(augmented_question, faiss_service)
 
-        # Remove the detail from required_details as it's now fulfilled
-        fulfilled_detail = conversation.required_details.pop(detail_index)
+        if generated_answer:
+            print("will update answer text")
+            conversation["answers"][0]["text"] = generated_answer
+        if references:
+            conversation["answers"][0]["references"] = [
+                {"type": "pdf", "document": "handbuch.pdf", "page": page} for page, chunk_type in references.items()
+            ]
+        conversation["state"] = ConversationState.FINISHED.value
+        return conversation
 
-        # --- Application Logic Placeholder ---
-        # TODO: Add logic here to process the submitted value.
-        # This might involve:
-        # 1. Calling another service (e.g., RAG again with the new info).
-        # 2. Updating the conversation's answers.
-        # 3. Adding new required_details if more input is needed.
-        # 4. Changing the conversation state.
-        
-        # Example: If no more details are required, finish the conversation
-        if not conversation.required_details:
-             conversation.state = ConversationState.FINISHED
+    def augment_question_with_details(self, original_question: str, details: list) -> str:
+        """
+        Insert details into the original question text to enrich it.
+        """
+        detail_texts = []
+        for detail in details:
+            if "template" in detail:
+                if "selected_value" in detail["template"]:
+                    selected_value = detail["template"]["selected_value"]
+                    if selected_value:
+                        print("will update selected value")
+                        # E.g., "Art: Kompression"
+                        detail_texts.append(f"{detail['template']['text']} {selected_value}/n")
+
+        if detail_texts:
+            # E.g., "Original Question (Art: Kompression)"
+            augmented = f"{original_question} ({'; '.join(detail_texts)})"
+            print(f"Augmented question: {augmented}")
+            return augmented
         else:
-             conversation.state = ConversationState.WAITING_FOR_USER # Or keep waiting if more details needed
+            return original_question
 
-        # --- End Placeholder ---
-
-        return conversation.to_dict()
     def to_json(self):
-        return {
-            "last_conversation_id": self.last_conversation_id,
-            "conversations": self.conversations
-        }
+        return {"last_conversation_id": self.last_conversation_id, "conversations": self.conversations}
+
 
 conversation_service = ConversationService()
 app = FastAPI()
@@ -191,6 +209,7 @@ async def answer_question(request: Request):
     question = question["text"]
     return {"answer": generate_rag_answer(question, faiss_service)}
 
+
 @app.post("/conversations")
 async def create_conversation(request: Request):
     question = await request.json()
@@ -203,6 +222,7 @@ async def create_conversation(request: Request):
 
     return JSONResponse(content=[], status_code=400)
 
+
 @app.get("/conversations/{conversation_id}")
 def get_conversation(conversation_id):
     conversation = conversation_service.get_conversation(conversation_id)
@@ -212,11 +232,14 @@ def get_conversation(conversation_id):
     else:
         return JSONResponse(content={}, status_code=404)
 
-@app.post("/conversations/{conversation_id}/detail/{detail_id}")
+
+@app.post("/conversations/{conversation_id}/details/{detail_id}")
 async def update_detail(conversation_id: str, detail_id: str, payload: DetailUpdatePayload):
+    selected_value = payload.data["art"]
+    print(f"Conversation ID: {conversation_id}, Detail ID: {detail_id}, Selected Value: {selected_value}")
     try:
-        updated_conversation_state = await conversation_service.update_conversation_detail(
-            conversation_id, detail_id, payload.value
+        updated_conversation_state = conversation_service.update_conversation_detail(
+            conversation_id, detail_id, selected_value
         )
         return JSONResponse(content=updated_conversation_state, status_code=200)
     except HTTPException as e:
@@ -224,5 +247,5 @@ async def update_detail(conversation_id: str, detail_id: str, payload: DetailUpd
         return JSONResponse(content={"error": e.detail}, status_code=e.status_code)
     except Exception as e:
         # Catch unexpected errors
-        print(f"Error updating detail: {e}") # Log the error
+        print(f"Error updating detail: {e}")  # Log the error
         return JSONResponse(content={"error": "Internal server error"}, status_code=500)

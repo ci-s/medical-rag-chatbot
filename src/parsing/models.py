@@ -116,3 +116,13 @@ class TextInFlowchartPage(BaseModel):
 
 class RewrittenQuestion(BaseModel):
     question: str = Field(description="the rewritten question")
+
+
+class FollowUpQuestion(BaseModel):
+    follow_up_required: bool = Field(description="Whether a follow-up question is required to clarify the situation")
+    follow_up_question: str = Field(
+        default=None, description="The follow-up question for the user, if further information is needed"
+    )
+    options: list[str] = Field(
+        default=None, description="List of dropdown options the user can select from to answer the follow-up question"
+    )
