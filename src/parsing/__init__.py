@@ -17,5 +17,6 @@ from .models import (
     FlowchartDescription,
     TextInFlowchartPage,
     RewrittenQuestion,
+    FollowUpQuestion,
 )
 from .parse_try_fix import parse_with_retry, get_format_instructions
