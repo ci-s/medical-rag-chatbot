@@ -164,6 +164,7 @@ class FaissService:
 
 
 def _retrieve(query: str, faiss_service: FaissService) -> list[Chunk]:
+    print("Retrieving with query: ", query)
     query, _ = replace_abbreviations(query)
     query_embedding = embed_chunks(query, task_type="search_query")
 
@@ -240,12 +241,16 @@ def retrieve(
     faiss_service: FaissService,
     production: bool = False,
 ) -> list[Chunk]:
+    if isinstance(question, Question):
+        query = question.get_question()
+    else:
+        query = question
     if production:
         if config.use_original_query_only:
-            return _retrieve(question, faiss_service)
+            return _retrieve(query, faiss_service)
     else:
         if config.use_original_query_only:
-            return _retrieve(question.get_question(), faiss_service)
+            return _retrieve(query, faiss_service)
 
         print("Using optimized query with method: ", config.optimization_method)
 
