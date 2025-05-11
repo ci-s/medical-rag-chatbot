@@ -67,7 +67,7 @@ def parse_with_retry(model: type[BaseModel], response: str, max_retries: int = 4
         user_prompt = FIX_OUTPUT_PROMPT.format(
             instructions=get_format_instructions(model), completion=response, error=error_message
         )
-        response = generate_response(SYSTEM_PROMPT, user_prompt, max_new_tokens=2048)
+        response = generate_response(user_prompt, SYSTEM_PROMPT, max_new_tokens=2048)
 
     parsed, _ = try_parse_result(response, model)
     return parsed

@@ -80,7 +80,7 @@ def evaluate_single(vignette_id: int, question_id: int, document: Document) -> F
 
     print("User prompt: ", user_prompt)
     print("System prompt: ", system_prompt)
-    generated_answer = generate_response(system_prompt, user_prompt)
+    generated_answer = generate_response(user_prompt, system_prompt)
     generated_answer = parse_with_retry(Answer, generated_answer)
 
     return llm_as_a_judge(vignette, question, generated_answer.answer, document)

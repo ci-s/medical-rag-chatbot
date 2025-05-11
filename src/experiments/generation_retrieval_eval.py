@@ -21,8 +21,7 @@ from domain.document import ChunkType, Chunk
 
 from settings.settings import settings
 from settings import get_page_types, config, VIGNETTE_COLLECTION
-from eval.generation import FeedbackResult
-from eval.combined import evaluate_single_combined
+from eval.combined import evaluate_single_combined, EvalResult
 
 # TODO: do it somewhere else in init
 import mlflow
@@ -81,7 +80,7 @@ def evaluate_source_combined(
     source: str,
     faiss_service: FaissService,
     document,
-) -> tuple[float, list[FeedbackResult]]:
+) -> tuple[float, float, float, list[EvalResult]]:
     """
     Evaluate both retrieval and generation for a given source using the combined evaluation function.
     """
@@ -120,7 +119,6 @@ def evaluate_source_combined(
 # Run combined evaluation
 source = "Handbuch"
 avg_score, avg_recall, avg_precision, all_feedbacks = evaluate_source_combined(source, faiss_service, document)
-
 # Save results
 tim = int(time.time())
 output_file = f"generation_retrieval_eval_{tim}_{config.experiment_name}.json"

@@ -306,7 +306,7 @@ def retrieve_table_by_summarization(table: Chunk, document: Document):
         
         The table content:\n{table.text}
         """  ## start and end page are the same for tables
-    response = generate_response(system_prompt, user_prompt)
+    response = generate_response(user_prompt, system_prompt)
     try:
         response = parse_with_retry(TableDescription, response)
         print("Response within summarization: ", response)

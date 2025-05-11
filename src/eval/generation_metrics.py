@@ -106,7 +106,7 @@ def extract_statements_from_answer(vignette: Vignette, question: Question, gener
     Question: {question.get_question()}
     Answer: {generated_answer}
     """
-    response = generate_response(system_prompt, user_prompt)
+    response = generate_response(user_prompt, system_prompt)
     try:
         statements = parse_with_retry(Statements, response)
         return statements.statements
@@ -158,7 +158,7 @@ def faithfulness(
     Question: {question.get_question()}
     Statements:\n{"\n".join(["Statement: " + statement for statement in statements])}
     """
-    response = generate_response(system_prompt, user_prompt)
+    response = generate_response(user_prompt, system_prompt)
     try:
         result_response = parse_with_retry(ResultsResponse, response)
         results = result_response.results
@@ -223,7 +223,7 @@ def answer_relevance(
 
     generated_questions = []
 
-    response = generate_response(system_prompt, user_prompt)
+    response = generate_response(user_prompt, system_prompt)
     try:
         response = parse_with_retry(AnswerRelevanceResultResponse, response)
     except Exception as e:

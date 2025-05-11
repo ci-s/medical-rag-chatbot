@@ -16,7 +16,7 @@ class RAGAnswer(NamedTuple):
 def generate_rag_answer(question: str, faiss_service: FaissService) -> RAGAnswer:
     retrieved_documents: list[Chunk] = _retrieve(question, faiss_service)
     system_prompt, user_prompt = create_question_prompt_w_docs_prod(retrieved_documents, question)
-    generated_answer = generate_response(system_prompt, user_prompt)
+    generated_answer = generate_response(user_prompt, system_prompt)
     generated_answer = parse_with_retry(Answer, generated_answer)
 
     references = {retrieved_doc.start_page: retrieved_doc.type for retrieved_doc in retrieved_documents}
@@ -54,7 +54,7 @@ def generate_followup_questions_if_needed(question: str, faiss_service: FaissSer
     """
 
     _, user_prompt = create_question_prompt_w_docs_prod(retrieved_documents, question)
-    response = generate_response(system_prompt, user_prompt)
+    response = generate_response(user_prompt, system_prompt)
     followup_question: FollowUpQuestion = parse_with_retry(FollowUpQuestion, response)
     if followup_question.follow_up_required:
         return followup_question

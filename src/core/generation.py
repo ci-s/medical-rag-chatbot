@@ -50,7 +50,7 @@ def summarize_documents(retrieved_documents: list[Chunk]) -> str:
     """
 
     user_prompt = "\n".join(f"Text {i + 1}:\n{doc.text}" for i, doc in enumerate(retrieved_documents))
-    response = generate_response(system_prompt, user_prompt)
+    response = generate_response(user_prompt, system_prompt)
     try:
         response = parse_with_retry(Summary, response)
         print("Response within summarization: ", response)
@@ -193,7 +193,7 @@ def describe_table_for_generation(table: Chunk, document: Document):
         
         The table content:\n{table.text}
         """  ## start and end page are the same for tables
-    response = generate_response(system_prompt, user_prompt)
+    response = generate_response(user_prompt, system_prompt)
     try:
         response = parse_with_retry(TableDescription, response)
         print("Response within summarization: ", response)
@@ -221,7 +221,7 @@ def markdown_table_for_generation(table: Chunk, document: Document):
     user_prompt = f"""
         The table content:\n{table.text}
         """  ## start and end page are the same for tables
-    response = generate_response(system_prompt, user_prompt)
+    response = generate_response(user_prompt, system_prompt)
     try:
         response = parse_with_retry(TableMarkdown, response)
         print("Response within summarization: ", response)
