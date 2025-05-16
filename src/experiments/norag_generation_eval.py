@@ -15,8 +15,8 @@ from settings import config, get_page_types
 from core.model import generate_response
 from domain.evaluation import Feedback
 from settings import VIGNETTE_COLLECTION
-from parsing import get_format_instructions, parse_with_retry, Answer
-from prompts import QUESTION_PROMPT
+from parsing import get_format_instructions, parse_with_retry, Answer, ReasoningAnswer, ThinkingAnswer
+from prompts import QUESTION_PROMPT, QUESTION_PROMPT_w_THINKING, QUESTION_PROMPT_w_REASONING
 from core.generation import create_user_question_prompt
 from core.utils import replace_abbreviations
 from prompts import GENERATION_EVALUATION_PROMPT
@@ -24,11 +24,15 @@ from parsing import Feedback as Feedback_Parsing
 from domain.vignette import Question, Vignette
 from domain.document import Document
 from core.document import get_document
+from eval.generation import llm_as_a_judge
 
 import mlflow
 
 mlflow.set_tracking_uri(uri="http://127.0.0.1:8080")
-mlflow.set_experiment("Phase 1 Generation")
+mlflow.set_experiment("Final Generation and Retrieval")
+
+# IMPORTANT: This script was revised to include reasoning and thinking
+
 NORAG_USER_PROMPT = """
     
     {user_prompt}
@@ -37,30 +41,7 @@ NORAG_USER_PROMPT = """
 """
 
 
-def llm_as_a_judge(vignette: Vignette, question: Question, generated_answer: str, document: Document) -> Feedback:
-    eval_prompt = GENERATION_EVALUATION_PROMPT.format(
-        reference_pages=" ".join(
-            [document.get_processed_content(page_number) for page_number in question.get_reference_pages()]
-        ),
-        question=f"""
-            Background:\n{vignette.background}
-            Question:\n{question.get_question()}
-            """,
-        reference_answer=question.get_answer(),
-        generated_answer=generated_answer,
-    )
-
-    eval_result = generate_response(eval_prompt)
-    try:
-        eval_result = parse_with_retry(Feedback_Parsing, eval_result)
-    except Exception as e:
-        print("Problematic parsing in llm as a judge:", e)
-        raise e
-
-    return Feedback(question.get_id(), eval_result.feedback, eval_result.score, generated_answer)
-
-
-def evaluate_single(vignette_id: int, question_id: int, document: Document) -> Feedback:
+def evaluate_single(vignette_id: int, question_id: int, document: Document) -> tuple[Feedback, str | None]:
     vignette = VIGNETTE_COLLECTION.get_vignette_by_id(vignette_id)
     questions = vignette.get_questions()
     print(f"Questions in vignette {vignette_id}: {len(questions)}")
@@ -76,14 +57,30 @@ def evaluate_single(vignette_id: int, question_id: int, document: Document) -> F
         user_prompt=user_prompt,
     )
     user_prompt, _ = replace_abbreviations(user_prompt)
-    system_prompt = QUESTION_PROMPT.format(format_instructions=get_format_instructions(Answer))
 
-    print("User prompt: ", user_prompt)
-    print("System prompt: ", system_prompt)
-    generated_answer = generate_response(system_prompt, user_prompt)
-    generated_answer = parse_with_retry(Answer, generated_answer)
+    if config.reasoning:
+        system_prompt = QUESTION_PROMPT_w_REASONING.format(format_instructions=get_format_instructions(ReasoningAnswer))
+    elif config.thinking:
+        system_prompt = QUESTION_PROMPT_w_THINKING.format(format_instructions=get_format_instructions(ThinkingAnswer))
+    else:
+        system_prompt = QUESTION_PROMPT.format(format_instructions=get_format_instructions(Answer))
 
-    return llm_as_a_judge(vignette, question, generated_answer.answer, document)
+    generated_answer = generate_response(user_prompt, system_prompt)
+
+    if config.thinking:
+        parsed_response = parse_with_retry(ThinkingAnswer, generated_answer)
+        generated_answer = parsed_response.answer
+        reasoning = parsed_response.thinking
+    elif config.reasoning:
+        parsed_response = parse_with_retry(ReasoningAnswer, generated_answer)
+        generated_answer = parsed_response.answer
+        reasoning = parsed_response.reasoning
+    else:
+        parsed_response = parse_with_retry(Answer, generated_answer)
+        generated_answer = parsed_response.answer
+        reasoning = None
+
+    return llm_as_a_judge(vignette, question, generated_answer, document), reasoning
 
 
 def evaluate_source(
@@ -98,12 +95,16 @@ def evaluate_source(
             print(f"Question: {question.get_id()}")
             if question.get_source() != source:
                 continue
-            all_feedbacks.append(evaluate_single(vignette.get_id(), question.get_id(), document))
+            feedback, reasoning = evaluate_single(vignette.get_id(), question.get_id(), document)
+            feedback_dict = feedback.to_dict()
+            if reasoning is not None:
+                feedback_dict["reasoning"] = reasoning
+            all_feedbacks.append(feedback_dict)
 
     print(f"Questions from {source}: {len([all_feedbacks for s in all_feedbacks if s is not None])}")
 
     try:
-        avg_score = mean([float(feedback.score) for feedback in all_feedbacks if feedback.score is not None])
+        avg_score = mean([float(feedback["score"]) for feedback in all_feedbacks if feedback["score"] is not None])
     except Exception as e:
         print("Trouble calculating average score: ", e)
         avg_score = 0
@@ -113,17 +114,9 @@ def evaluate_source(
 
 file_path = os.path.join(settings.data_path, settings.file_name)
 
-if config.filter_questions:
-    if config.filter_questions == ["Text"]:
-        pages, _, _, _ = get_page_types()
-    elif config.filter_questions == ["Table"]:
-        _, _, pages, _ = get_page_types()
-    elif config.filter_questions == ["Flowchart"]:
-        _, pages, _, _ = get_page_types()
-    else:
-        raise ValueError("Multiple filter_questions value is not configured for page types yet")
-else:
-    pages = list(range(7, 109))
+text_pages, _, table_pages, _ = get_page_types()
+pages = sorted(text_pages + table_pages)
+print(f"Number of pages: {len(pages)}")
 
 document = get_document(file_path, pages)
 result_dict = []
@@ -135,7 +128,7 @@ tim = int(time.time())
 result_dict = {
     "config": config.model_dump(),
     "settings": settings.model_dump(mode="json"),
-    "all_feedbacks": [fb.to_dict() for fb in all_feedbacks],
+    "all_feedbacks": all_feedbacks,
     "avg_score": avg_score,
 }
 

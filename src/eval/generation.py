@@ -122,7 +122,7 @@ def evaluate_single(
     print(f"# of Retrieved documents: {len(retrieved_documents)}")
     print(f"Retrieved docs: {[doc.__str__() for doc in retrieved_documents]}")
     system_prompt, user_prompt = create_question_prompt_w_docs(retrieved_documents, vignette, question)
-    generated_answer = generate_response(system_prompt, user_prompt)
+    generated_answer = generate_response(user_prompt, system_prompt)
     if config.reasoning:
         generated_answer = parse_with_retry(ReasoningAnswer, generated_answer)
     elif config.thinking:
@@ -189,7 +189,7 @@ def evaluate_single_w_ragas(
     retrieved_documents = retrieve(vignette, question, faiss_service)
     system_prompt, user_prompt = create_question_prompt_w_docs(retrieved_documents, vignette, question)
 
-    generated_answer = generate_response(system_prompt, user_prompt)
+    generated_answer = generate_response(user_prompt, system_prompt)
     generated_answer = parse_with_retry(Answer, generated_answer)
 
     return RAGASResult(

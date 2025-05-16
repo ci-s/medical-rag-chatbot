@@ -70,7 +70,7 @@ def context_relevance(
     context = ". ".join([doc.text for doc in retrieved_documents])
     user_prompt = f"Context: {context}\nQuestion: {question.get_question()}"
 
-    response = generate_response(system_prompt, user_prompt, max_new_tokens=2048)
+    response = generate_response(user_prompt, system_prompt, max_new_tokens=2048)
     try:
         response = parse_with_retry(ContextRelevanceResultResponse, response)
     except Exception as e:

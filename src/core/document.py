@@ -48,7 +48,7 @@ def inject_whitespace_w_llm(text: str) -> str:
      Text: {text}
     """
     user_prompt = user_prompt.format(text=text)
-    response = generate_response(system_prompt, user_prompt, max_new_tokens=2048)
+    response = generate_response(user_prompt, system_prompt, max_new_tokens=2048)
     parsed_response = parse_with_retry(WhitespaceInjectionResponse, response)
     return parsed_response.processed_text
 
