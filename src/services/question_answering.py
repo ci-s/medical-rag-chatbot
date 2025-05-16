@@ -2,25 +2,40 @@ from typing import NamedTuple
 from enum import Enum
 
 from core.generation import create_question_prompt_w_docs_prod
-from parsing import parse_with_retry, Answer, FollowUpQuestion
+from parsing import parse_with_retry, Answer, FollowUpQuestion, ThinkingAnswer, ReasoningAnswer
 from services.retrieval import FaissService, _retrieve
 from core.model import generate_response
 from domain.document import Chunk
+from settings import config
 
 
 class RAGAnswer(NamedTuple):
     generated_answer: str
     references: dict[int, str]  # page number, chunk type i.e. 15: "table"
+    reasoning: str | None = None
 
 
-def generate_rag_answer(question: str, faiss_service: FaissService) -> RAGAnswer:
+def generate_rag_answer(question: str, faiss_service: FaissService, augmented_question: str | None = None) -> RAGAnswer:
     retrieved_documents: list[Chunk] = _retrieve(question, faiss_service)
-    system_prompt, user_prompt = create_question_prompt_w_docs_prod(retrieved_documents, question)
-    generated_answer = generate_response(user_prompt, system_prompt)
-    generated_answer = parse_with_retry(Answer, generated_answer)
-
     references = {retrieved_doc.start_page: retrieved_doc.type for retrieved_doc in retrieved_documents}
-    return RAGAnswer(generated_answer.answer, references)
+
+    system_prompt, user_prompt = create_question_prompt_w_docs_prod(retrieved_documents, augmented_question)
+    generated_answer = generate_response(user_prompt, system_prompt)
+
+    reasoning = None
+    if config.thinking:
+        generated_answer = parse_with_retry(ThinkingAnswer, generated_answer)
+        reasoning = generated_answer.thinking
+        generated_answer = generated_answer.answer
+    elif config.reasoning:
+        generated_answer = parse_with_retry(ReasoningAnswer, generated_answer)
+        reasoning = generated_answer.reasoning
+        generated_answer = generated_answer.answer
+    else:
+        generated_answer = parse_with_retry(Answer, generated_answer)
+        generated_answer = generated_answer.answer
+
+    return RAGAnswer(generated_answer, references, reasoning)
 
 
 def generate_followup_questions_if_needed(question: str, faiss_service: FaissService) -> FollowUpQuestion | None:
@@ -32,13 +47,14 @@ def generate_followup_questions_if_needed(question: str, faiss_service: FaissSer
         You are given a user’s clinical question and the relevant background information about the patient.
 
         Your task is:
-            1.	Determine if further information is needed to safely and accurately answer the question.
+            1.	Determine if further information is needed to safely and accurately answer the question based on provided documents.
             2.	If additional clarification is needed, generate:
             •	A clear and specific follow-up question in German.
             •	Dropdown options (3–5 options) that the clinician can choose from (also in German).
             3.	If no additional clarification is needed, respond that no follow-up is required.
             4.  Only ask for information that is not already provided in the background.
             5.  Focus on decision-relevant missing variables like vital signs, contraindications, therapy windows, imaging findings.
+            6.  Avoid asking for information that doesn't exist in the provided documents.
 
         **Example Format:**
         Background: {{background}}
@@ -69,7 +85,9 @@ class ConversationState(Enum):
 
 
 class Conversation:
-    def __init__(self, id: str, state: ConversationState, text: str, details: list, answers: list):
+    def __init__(
+        self, id: str, state: ConversationState, text: str, details: list, answers: list, reasoning: str | None = None
+    ):
         self.id = id
         self.state = state
         self.text = text
@@ -99,16 +117,26 @@ class ConversationService:
         quick_answer = {
             "type": "quick",
             "text": "",
+            "reasoning": None,
             # "reference": {"type": "pdf", "document": "handbuch.pdf", "page": 12},
         }
 
         conversation = Conversation(
-            id=id, state=ConversationState.GENERATING, text=question, details=[], answers=[quick_answer]
+            id=id,
+            state=ConversationState.GENERATING,
+            text=question,
+            details=[],
+            answers=[quick_answer],
         )
         conversation = conversation.to_dict()
         self.conversations[str(id)] = conversation
 
-        def on_update(generated_answer: str | None, references: dict | None, form_detail: dict = None):
+        def on_update(
+            generated_answer: str | None,
+            references: dict | None,
+            form_detail: dict = None,
+            reasoning: str | None = None,
+        ):
             if generated_answer:
                 quick_answer["text"] = generated_answer
             if references:
@@ -122,6 +150,9 @@ class ConversationService:
                 generated_answer = "Sorry there has been a problem with your request."
                 quick_answer["text"] = generated_answer
 
+            if reasoning:
+                quick_answer["reasoning"] = reasoning
+
         followup_question = generate_followup_questions_if_needed(question, self.document_index)
 
         if followup_question is not None:
@@ -134,11 +165,11 @@ class ConversationService:
                     "fields": {"art": {"type": "select", "label": "Select", "options": followup_question.options}},
                 },
             }
-            on_update(None, None, form_detail)
+            on_update(None, None, form_detail, None)
         else:
             # No follow-up needed → generate final answer immediately
-            generated_answer, references = generate_rag_answer(question, self.document_index)
-            on_update(generated_answer, references)
+            generated_answer, references, reasoning = generate_rag_answer(question, self.document_index)
+            on_update(generated_answer, references, None, reasoning)
 
         if conversation["details"]:
             conversation["state"] = ConversationState.WAITING_FOR_USER.value
@@ -163,7 +194,9 @@ class ConversationService:
 
         original_question = conversation["text"]
         augmented_question = self.augment_question_with_details(original_question, conversation["details"])
-        generated_answer, references = generate_rag_answer(augmented_question, self.document_index)
+        generated_answer, references, reasoning = generate_rag_answer(
+            original_question, self.document_index, augmented_question
+        )
 
         if generated_answer:
             print("will update answer text")
@@ -172,6 +205,9 @@ class ConversationService:
             conversation["answers"][0]["references"] = [
                 {"type": "pdf", "document": "handbuch.pdf", "page": page} for page, chunk_type in references.items()
             ]
+        if reasoning:
+            conversation["answers"][0]["reasoning"] = reasoning
+
         conversation["state"] = ConversationState.FINISHED.value
         return conversation
 

@@ -267,6 +267,38 @@ def retrieve(
         return retrieved_documents
 
 
+def retrieve_and_return_optimized_query(
+    vignette: Vignette | None,
+    question: Question | str,
+    faiss_service: FaissService,
+    production: bool = False,
+) -> tuple[list[Chunk], str | list[str]]:
+    if isinstance(question, Question):
+        query = question.get_question()
+    else:
+        query = question
+    if production:
+        if config.use_original_query_only:
+            return _retrieve(query, faiss_service)
+    else:
+        if config.use_original_query_only:
+            return _retrieve(query, faiss_service)
+
+        print("Using optimized query with method: ", config.optimization_method)
+
+        system_prompt = get_optimization_prompt()
+        user_prompt = create_user_question_prompt(vignette, question)
+        response = generate_response(user_prompt, system_prompt)
+        new_query = parse_optimized_query(response)
+        # add parser because decompose will return two queries
+        if isinstance(new_query, list):
+            retrieved_documents = _retrieve_and_rank(new_query, faiss_service)
+        else:
+            retrieved_documents = _retrieve(new_query, faiss_service)
+
+        return retrieved_documents, new_query
+
+
 def retrieve_table_by_summarization(table: Chunk, document: Document):
     system_prompt = """
         You'll be given a table along with the context from a medical document that clinicians use to make decisions.

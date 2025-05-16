@@ -1,5 +1,5 @@
 from .retrieval_metrics import recall, precision
-from services.retrieval import FaissService, retrieve
+from services.retrieval import FaissService, retrieve_and_return_optimized_query
 from domain.document import Document
 from core.model import generate_response
 from core.generation import create_question_prompt_w_docs
@@ -21,6 +21,7 @@ class EvalResult:
         question_id: int,
         score: float,
         generated_answer: str,
+        optimized_query: str | list[str],
         reference_pages: list,
         retrieved_documents: list[Chunk],
         retrieval_recall: float,
@@ -30,6 +31,7 @@ class EvalResult:
         self.question_id = question_id
         self.score = score
         self.generated_answer = generated_answer
+        self.optimized_query = optimized_query
         self.reference_pages = reference_pages
         self.retrieved_documents = retrieved_documents
         self.retrieval_recall = retrieval_recall
@@ -44,6 +46,7 @@ class EvalResult:
             "question_id": self.question_id,
             "score": self.score,
             "generated_answer": self.generated_answer,
+            "optimized_query": self.optimized_query,
             "reference_pages": list(self.reference_pages),
             "retrieved_documents": [doc.to_dict() for doc in self.retrieved_documents],
             "retrieval_recall": self.retrieval_recall,
@@ -61,7 +64,7 @@ def evaluate_single_combined(
     Evaluate both retrieval and generation for a single question.
     """
 
-    retrieved_documents = retrieve(vignette, question, faiss_service)
+    retrieved_documents, optimized_query = retrieve_and_return_optimized_query(vignette, question, faiss_service)
     retrieval_recall = recall(retrieved_documents, question.get_reference_pages())
     retrieval_precision = precision(retrieved_documents, question.get_reference_pages())
 
@@ -91,6 +94,7 @@ def evaluate_single_combined(
         question_id=question.get_id(),
         score=generation_feedback.score,
         generated_answer=answer_dict,
+        optimized_query=optimized_query,
         reference_pages=question.get_reference_pages(),
         retrieved_documents=retrieved_documents,
         retrieval_recall=retrieval_recall,
