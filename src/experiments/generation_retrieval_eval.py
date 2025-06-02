@@ -22,12 +22,18 @@ from domain.document import ChunkType, Chunk
 from settings.settings import settings
 from settings import get_page_types, config, VIGNETTE_COLLECTION
 from eval.combined import evaluate_single_combined, EvalResult
+from eval.generation import evaluate_ragas
 
 # TODO: do it somewhere else in init
 import mlflow
 
 mlflow.set_tracking_uri(uri="http://127.0.0.1:8080")
-mlflow.set_experiment("Final Generation and Retrieval")
+
+ragas = config.ragas
+if ragas:
+    mlflow.set_experiment("Ragas Generation and Retrieval")
+else:
+    mlflow.set_experiment("Final Generation and Retrieval")
 
 file_path = os.path.join(settings.data_path, settings.file_name)
 
@@ -118,7 +124,11 @@ def evaluate_source_combined(
 
 # Run combined evaluation
 source = "Handbuch"
-avg_score, avg_recall, avg_precision, all_feedbacks = evaluate_source_combined(source, faiss_service, document)
+if ragas:
+    avg_scores, avg_recall, avg_precision, all_feedbacks = evaluate_ragas("Handbuch", faiss_service, document)
+    print("Average scores for Ragas: ", avg_scores)
+else:
+    avg_score, avg_recall, avg_precision, all_feedbacks = evaluate_source_combined(source, faiss_service, document)
 # Save results
 tim = int(time.time())
 output_file = f"generation_retrieval_eval_{tim}_{config.experiment_name}.json"
@@ -126,7 +136,7 @@ output_path = os.path.join(settings.results_path, output_file)
 with open(output_path, "w") as file:
     json.dump(
         {
-            "avg_generation_score": avg_score,
+            "avg_generation_score": avg_score if not ragas else avg_scores,
             "avg_retrieval_recall": avg_recall,
             "avg_retrieval_precision": avg_precision,
             "all_feedbacks": [feedback.to_dict() for feedback in all_feedbacks],
@@ -140,7 +150,11 @@ with mlflow.start_run():
     mlflow.log_params(config.model_dump())
     mlflow.log_params(settings.model_dump(mode="json"))
     mlflow.log_params({"num_questions": len(all_feedbacks)})
-    mlflow.log_metric("avg_generation_score", avg_score)
+    if ragas:
+        for metric, avg_score in avg_scores.items():
+            mlflow.log_metric(metric, avg_score)
+    else:
+        mlflow.log_metric("avg_generation_score", avg_score)
     mlflow.log_metric("avg_retrieval_recall", avg_recall)
     mlflow.log_metric("avg_retrieval_precision", avg_precision)
     mlflow.set_tag("name", config.experiment_name)

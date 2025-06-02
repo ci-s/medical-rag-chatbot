@@ -70,21 +70,22 @@ def context_relevance(
     context = ". ".join([doc.text for doc in retrieved_documents])
     user_prompt = f"Context: {context}\nQuestion: {question.get_question()}"
 
-    response = generate_response(user_prompt, system_prompt, max_new_tokens=2048)
+    response = generate_response(user_prompt, system_prompt, max_new_tokens=4096)
     try:
         response = parse_with_retry(ContextRelevanceResultResponse, response)
+        relevant_sentences = response.relevant_sentences
+        irrelevant_sentences = response.irrelevant_sentences
+
+        relevant_sentence_count = len(relevant_sentences)
+
+        total_sentence_count = relevant_sentence_count + len(irrelevant_sentences)
+
+        score = relevant_sentence_count / total_sentence_count if total_sentence_count > 0 else 0.0
     except Exception as e:
-        print("Bad parsing in context relevance:", e)
-        raise e
-
-    relevant_sentences = response.relevant_sentences
-    irrelevant_sentences = response.irrelevant_sentences
-
-    relevant_sentence_count = len(relevant_sentences)
-
-    total_sentence_count = relevant_sentence_count + len(irrelevant_sentences)
-
-    score = relevant_sentence_count / total_sentence_count if total_sentence_count > 0 else 0.0
+        print(f"Error parsing response: {e}")
+        relevant_sentences = []
+        irrelevant_sentences = []
+        score = 0.0
 
     return ContextRelevanceResult(
         relevant_sentences=relevant_sentences,
