@@ -226,6 +226,7 @@ def evaluate_single_w_ragas(
     system_prompt, user_prompt = create_question_prompt_w_docs(retrieved_documents, vignette, question)
 
     generated_answer = generate_response(user_prompt, system_prompt)
+    
     if config.reasoning:
         generated_answer = parse_with_retry(ReasoningAnswer, generated_answer)
         answer_dict = {
@@ -243,6 +244,7 @@ def evaluate_single_w_ragas(
         answer_dict = {
             "answer": generated_answer.answer,
         }
+
 
     return RAGASResult(
         question_id=question_id,

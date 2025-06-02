@@ -14,7 +14,6 @@ class RAGAnswer(NamedTuple):
     references: dict[int, str]  # page number, chunk type i.e. 15: "table"
     reasoning: str | None = None
 
-
 def generate_rag_answer(
     question: str,
     faiss_service: FaissService,
@@ -37,7 +36,9 @@ def generate_rag_answer(
     else:
         retrieved_documents: list[Chunk] = _retrieve(question, faiss_service)
 
+
     references = {retrieved_doc.start_page: retrieved_doc.type for retrieved_doc in retrieved_documents}
+
 
     system_prompt, user_prompt = create_question_prompt_w_docs_prod(retrieved_documents, augmented_question)
     generated_answer = generate_response(user_prompt, system_prompt)
@@ -90,6 +91,7 @@ def generate_followup_questions_if_needed(question: str, faiss_service: FaissSer
 
     _, user_prompt = create_question_prompt_w_docs_prod(retrieved_documents, question)
     response = generate_response(user_prompt, system_prompt)
+
     followup_question: FollowUpQuestion = parse_with_retry(FollowUpQuestion, response)
     if followup_question.follow_up_required:
         return followup_question
@@ -143,6 +145,7 @@ def generate_followup_questions_following_the_flowchart(
 
     _, user_prompt = create_question_prompt_w_docs_prod(retrieved_documents, question)
     response = generate_response(user_prompt, system_prompt)
+
     followup_question: FollowUpQuestion = parse_with_retry(FollowUpQuestion, response)
     if followup_question.follow_up_required:
         return followup_question
@@ -231,6 +234,7 @@ class ConversationService:
         else:
             followup_question = generate_followup_questions_if_needed(question, self.document_index)
 
+
         if followup_question is not None:
             self.last_detail_id += 1
             form_detail = {
@@ -244,9 +248,11 @@ class ConversationService:
             on_update(None, None, form_detail, None)
         else:
             # No follow-up needed → generate final answer immediately
+
             generated_answer, references, reasoning = generate_rag_answer(
                 question, self.document_index, config.flowchart_page
             )
+
             on_update(generated_answer, references, None, reasoning)
 
         if conversation["details"]:

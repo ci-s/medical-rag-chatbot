@@ -71,6 +71,7 @@ def context_relevance(
     user_prompt = f"Context: {context}\nQuestion: {question.get_question()}"
 
     response = generate_response(user_prompt, system_prompt, max_new_tokens=4096)
+
     try:
         response = parse_with_retry(ContextRelevanceResultResponse, response)
         relevant_sentences = response.relevant_sentences
