@@ -2,6 +2,7 @@ from pathlib import Path
 from typing import Literal
 from dotenv import load_dotenv
 import yaml
+import os
 
 from pydantic_settings import BaseSettings
 from pydantic import BaseModel, Field
@@ -64,11 +65,23 @@ class Config(BaseModel):
     reasoning: bool = False
     thinking: bool = False
 
-    saved_chunks_path: str | None = None
+    saved_chunks_path_raw: str | None = None
+
+    ragas: bool = False
+
+    following_flowchart: bool = False
+    flowchart_page: int | None = None
 
     def dump(self, file_path: str) -> None:
         with open(file_path, "w", encoding="utf-8") as file:
             yaml.dump(self.model_dump(), file, default_flow_style=False, allow_unicode=True)
+
+    @property
+    def saved_chunks_path(self):
+        if self.saved_chunks_path_raw:
+            return os.path.join(settings.data_path, self.saved_chunks_path_raw)
+        else:
+            None
 
 
 with open(settings.config_path, "r", encoding="utf-8") as file:

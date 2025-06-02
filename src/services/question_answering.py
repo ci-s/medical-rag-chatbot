@@ -14,10 +14,31 @@ class RAGAnswer(NamedTuple):
     references: dict[int, str]  # page number, chunk type i.e. 15: "table"
     reasoning: str | None = None
 
+def generate_rag_answer(
+    question: str,
+    faiss_service: FaissService,
+    augmented_question: str | None = None,
+    follow_flowchart_page: int | None = None,
+) -> RAGAnswer:
+    if follow_flowchart_page is not None:
+        print(f"Following the flowchart on page {follow_flowchart_page}")
+        from eval.generation_metrics import get_generated_flowchart_page_description
 
-def generate_rag_answer(question: str, faiss_service: FaissService, augmented_question: str | None = None) -> RAGAnswer:
-    retrieved_documents: list[Chunk] = _retrieve(question, faiss_service)
+        retrieved_documents = []
+        retrieved_documents.append(
+            Chunk(
+                text=get_generated_flowchart_page_description(follow_flowchart_page),
+                start_page=follow_flowchart_page,
+                end_page=follow_flowchart_page,
+                index=None,
+            )
+        )
+    else:
+        retrieved_documents: list[Chunk] = _retrieve(question, faiss_service)
+
+
     references = {retrieved_doc.start_page: retrieved_doc.type for retrieved_doc in retrieved_documents}
+
 
     system_prompt, user_prompt = create_question_prompt_w_docs_prod(retrieved_documents, augmented_question)
     generated_answer = generate_response(user_prompt, system_prompt)
@@ -57,7 +78,6 @@ def generate_followup_questions_if_needed(question: str, faiss_service: FaissSer
             6.  Avoid asking for information that doesn't exist in the provided documents.
 
         **Example Format:**
-        Background: {{background}}
         Question: {{question}}
 
         {
@@ -71,6 +91,61 @@ def generate_followup_questions_if_needed(question: str, faiss_service: FaissSer
 
     _, user_prompt = create_question_prompt_w_docs_prod(retrieved_documents, question)
     response = generate_response(user_prompt, system_prompt)
+
+    followup_question: FollowUpQuestion = parse_with_retry(FollowUpQuestion, response)
+    if followup_question.follow_up_required:
+        return followup_question
+    else:
+        None
+
+
+def generate_followup_questions_following_the_flowchart(
+    question: str, faiss_service: FaissService
+) -> FollowUpQuestion | None:
+    from eval.generation_metrics import get_generated_flowchart_page_description
+
+    retrieved_documents = []
+    if config.flowchart_page is not None:
+        page_number = config.flowchart_page
+    else:
+        raise ValueError("follow_flowchart_page must be provided when following the flowchart")
+    retrieved_documents.append(
+        Chunk(
+            text=get_generated_flowchart_page_description(page_number),
+            start_page=page_number,
+            end_page=page_number,
+            index=None,
+        )
+    )
+
+    system_prompt = """
+        You are a medical assistant specialized in supporting clinicians during decision making.
+
+        You are given a user’s clinical question and the relevant background information about the patient.
+
+        Your task is:
+            1.	Determine if further information is needed to safely and accurately answer the question based on provided documents.
+            2.	If additional clarification is needed, generate:
+            •	A clear and specific follow-up question in German.
+            •	Dropdown options (3–5 options) that the clinician can choose from (also in German).
+            3.	If no additional clarification is needed, respond that no follow-up is required.
+            4.  Only ask for information that is not already provided in the background.
+            5.  Focus on decision-relevant missing variables like vital signs, contraindications, therapy windows, imaging findings.
+            6.  Avoid asking for information that doesn't rely on the provided documents. Follow the flowchart strictly.
+
+        **Example Format:**
+        {
+        "follow_up_required": true/false,
+        "follow_up_question": "string, only if follow_up_required is true otherwise empty",
+        "options": ["option 1", "option 2", "option 3", "..."] // only if follow_up_required is true otherwise empty
+        }
+        
+        Do not say anything else. Make sure the response is a valid JSON.
+    """
+
+    _, user_prompt = create_question_prompt_w_docs_prod(retrieved_documents, question)
+    response = generate_response(user_prompt, system_prompt)
+
     followup_question: FollowUpQuestion = parse_with_retry(FollowUpQuestion, response)
     if followup_question.follow_up_required:
         return followup_question
@@ -153,7 +228,12 @@ class ConversationService:
             if reasoning:
                 quick_answer["reasoning"] = reasoning
 
-        followup_question = generate_followup_questions_if_needed(question, self.document_index)
+        if config.following_flowchart:
+            print("Following the flowchart")
+            followup_question = generate_followup_questions_following_the_flowchart(question, self.document_index)
+        else:
+            followup_question = generate_followup_questions_if_needed(question, self.document_index)
+
 
         if followup_question is not None:
             self.last_detail_id += 1
@@ -168,7 +248,11 @@ class ConversationService:
             on_update(None, None, form_detail, None)
         else:
             # No follow-up needed → generate final answer immediately
-            generated_answer, references, reasoning = generate_rag_answer(question, self.document_index)
+
+            generated_answer, references, reasoning = generate_rag_answer(
+                question, self.document_index, config.flowchart_page
+            )
+
             on_update(generated_answer, references, None, reasoning)
 
         if conversation["details"]:
@@ -195,7 +279,7 @@ class ConversationService:
         original_question = conversation["text"]
         augmented_question = self.augment_question_with_details(original_question, conversation["details"])
         generated_answer, references, reasoning = generate_rag_answer(
-            original_question, self.document_index, augmented_question
+            original_question, self.document_index, augmented_question, config.flowchart_page
         )
 
         if generated_answer:
@@ -224,7 +308,7 @@ class ConversationService:
                     if selected_value:
                         print("will update selected value")
                         # E.g., "Art: Kompression"
-                        detail_texts.append(f"{detail['template']['text']} {selected_value}/n")
+                        detail_texts.append(f"{detail['template']['text']} Answer: {selected_value}")
 
         if detail_texts:
             # E.g., "Original Question (Art: Kompression)"
