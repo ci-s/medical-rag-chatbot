@@ -24,10 +24,6 @@ cache = ExLlamaV2Cache(model, max_seq_len = 16384, lazy = True)
 model.load_autosplit(cache, progress = False)
 tokenizer = ExLlamaV2Tokenizer(config)
 
-# Figure out temperature setting
-# settings = ExLlamaV2Sampler.Settings()
-# settings.temperature = 0.85
-
 generator = ExLlamaV2DynamicGenerator(
     model = model,
     cache = cache,
@@ -42,27 +38,6 @@ class PromptFormat_llama3:
     def __init__(self):
         pass
 
-    def default_system_prompt(self):
-        return \
-            """Assist users with tasks and answer questions to the best of your knowledge. Provide helpful and informative """ + \
-            """responses. Be conversational and engaging. If you are unsure or lack knowledge on a topic, admit it and try """ + \
-            """to find the answer or suggest where to find it. Keep responses concise and relevant. Follow ethical """ + \
-            """guidelines and promote a safe and respectful interaction."""
-
-    def first_prompt(self):
-        return \
-            """<|start_header_id|>system<|end_header_id|>\n\n""" + \
-            """<|system_prompt|><|eot_id|>""" + \
-            """<|start_header_id|>user<|end_header_id|>\n\n""" + \
-            """<|user_prompt|><|eot_id|>""" + \
-            """<|start_header_id|>assistant<|end_header_id|>"""
-
-    def subs_prompt(self):
-        return \
-            """<|eot_id|><|start_header_id|>user<|end_header_id|>\n\n""" + \
-            """<|user_prompt|><|eot_id|>""" + \
-            """<|start_header_id|>assistant<|end_header_id|>"""
-
     def stop_conditions(self, tokenizer):
         return \
             [tokenizer.eos_token_id,
@@ -75,16 +50,6 @@ class PromptFormat_llama3:
     def print_extra_newline(self):
         return True
     
-def format_prompt(prompt_format: PromptFormat_llama3, user_prompt, first=True):
-
-    if first:
-        return prompt_format.first_prompt() \
-            .replace("<|system_prompt|>", prompt_format.default_system_prompt()) \
-            .replace("<|user_prompt|>", user_prompt)
-    else:
-        return prompt_format.subs_prompt() \
-            .replace("<|user_prompt|>", user_prompt)
-
 
 prompt_format = PromptFormat_llama3()
 add_bos, add_eos, encode_special_tokens = prompt_format.encoding_options()
@@ -98,10 +63,9 @@ def read_root():
 @app.post("/generate")
 async def generate(request: Request) -> Response:
     request_dict = await request.json()
-    # Read contract
     prompt = request_dict.pop("prompt")
     max_new_tokens = request_dict.pop("max_new_tokens")
-    response = generator.generate(prompt = prompt, max_new_tokens = max_new_tokens, add_bos = add_bos, stop_conditions=stop_conditions, completion_only=True)
+    response = generator.generate(prompt = prompt, max_new_tokens = max_new_tokens, add_bos = add_bos, stop_conditions=stop_conditions, completion_only=True, seed=15)
     return JSONResponse(response)
 
 if __name__ == "__main__":
