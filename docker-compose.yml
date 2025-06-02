@@ -1,0 +1,18 @@
+version: "3.9"
+services:
+  app:
+    build: .
+    platform: linux/amd64
+    working_dir: /app/src
+    env_file:
+      - .env.development
+    ports:
+      - "7001:7001"
+    volumes:
+      - ./src:/app/src
+      - ./config:/app/config
+      - ./data:/app/data
+      - ./pyproject.toml:/app/pyproject.toml
+      - ./uv.lock:/app/uv.lock
+      - ./.env.development:/app/.env.development
+    command: uv run uvicorn serve.app:app --host 0.0.0.0 --port 7001 --reload
