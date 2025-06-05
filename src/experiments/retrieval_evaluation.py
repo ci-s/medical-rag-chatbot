@@ -30,39 +30,9 @@ mlflow.set_tracking_uri(uri="http://127.0.0.1:8080")
 mlflow.set_experiment("Phase 2 Retrieval")
 
 
-#    - Take footnotes into account when relevant.
-# prompt = """You'll be given a page containing a flowchart from a medical document that clinicians use to make decisions.
-
-#     Your task is to generate a detailed description in German that maximizes retrieval effectiveness. Your response should follow these guidelines:
-
-#     - Provide a concise yet informative overview of what the flowchart represents.
-#     - Include key medical concepts and terms clinicians might search for.
-#     - Use synonyms and alternative phrasing to capture diverse query formulations.
-
-#     Your response must follow this JSON format strictly:
-
-#     {
-#         "description": "<Your overview in German in one single string>"
-#     } <END OF JSON>
-
-#     Do not say anything else. Make sure the response is a valid JSON. Stop immediately at <END OF JSON>.\n
-# """
-
-
 file_path = os.path.join(settings.data_path, settings.file_name)
 
 
-# if config.filter_questions:
-#     text_pages, _, table_pages, _ = get_page_types()
-#     pages = []
-#     if "Text" in config.filter_questions:
-#         pages.extend(text_pages)
-#     if "Table" in config.filter_questions:
-#         pages.extend(table_pages)
-#     # No need for flowchart pages because they are processed as images
-#     pages = sorted(pages)
-# else:
-#     pages = list(range(7, 109))
 text_pages, _, table_pages, _ = get_page_types()
 pages = sorted(text_pages + table_pages)
 print(f"Number of pages: {len(pages)}")
@@ -71,8 +41,8 @@ document = get_document(file_path, pages)
 method_args = {
     # "semantic": {},  # set NOMIC_API_KEY
     # "section": {"toc": None},
-    # "section_and_size": {"toc": None, "chunk_size": config.chunk_size},
-    "size": {"chunk_size": config.chunk_size},
+    "section_and_size": {"toc": None, "chunk_size": config.chunk_size},
+    # "size": {"chunk_size": config.chunk_size},
     # "size": {}
 }
 
@@ -80,8 +50,8 @@ method_args = {
 result_dicts = []
 for method, args in method_args.items():
     for optim_method in [
-        # None,
-        "hypothetical_document",
+        None,
+        # "hypothetical_document",
         # "decomposing",
         # "paraphrasing",
         # "stepback",
@@ -118,13 +88,13 @@ for method, args in method_args.items():
                 else:
                     raise ValueError(f"Chunk type {chunk.type} is not implemented yet.")
 
-            save_chunks(all_chunks)
+            flowchart_directory = os.path.join(settings.data_path, "flowcharts")
+            fchunks = create_flowchart_chunks(flowchart_directory)
+            for fchunk in fchunks:
+                all_chunks.append((fchunk.text, fchunk))
 
-        # flowchart_directory = os.path.join(settings.data_path, "flowcharts")
-        # fchunks = create_flowchart_chunks(flowchart_directory)
-        # for fchunk in fchunks:
-        #     all_chunks.append((fchunk.text, fchunk))
-        # save_chunks(all_chunks, output_filename="flowchart_longer_hori.json")
+            all_chunks = reorder_flowchart_chunks(all_chunks)
+            save_chunks(all_chunks)
 
         faiss_service = FaissService()
         faiss_service.create_index(all_chunks)

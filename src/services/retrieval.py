@@ -130,38 +130,6 @@ class FaissService:
 
         return scores, retrieved_chunks
 
-    # def add_chunks(
-    #     self,
-    #     new_chunks: list[Chunk],
-    #     retrieve_by: Callable[[Chunk], str] = lambda chunk: chunk.section_heading + " " + chunk.text
-    #     if chunk.section_heading
-    #     else chunk.text,
-    # ):
-    #     """Adds new chunks to the existing FAISS index."""
-    #     if new_chunks is None or len(new_chunks) == 0:
-    #         raise ValueError("New chunks cannot be None or empty.")
-
-    #     if self.index is None:
-    #         print("Index not found. Creating a new index...")
-    #         self.create_index(new_chunks, retrieve_by)
-    #         return
-
-    #     # Process new chunks using `retrieve_by`
-    #     new_retrieval_strings = [retrieve_by(chunk) for chunk in new_chunks]
-    #     new_embeddings = embed_chunks(new_retrieval_strings, task_type="search_document")
-
-    #     self.index.add(new_embeddings)
-
-    #     current_length = len(self.chunks)
-    #     # TODO: fix order?
-    #     self.chunks.extend(new_chunks)
-    #     self.retrieval_strings.extend(new_retrieval_strings)
-
-    #     for i, chunk in enumerate(new_chunks, start=current_length):
-    #         chunk.index = i
-
-    #     print(f"Added {len(new_chunks)} new chunks. Total chunks: {len(self.chunks)}")
-
 
 def _retrieve(query: str, faiss_service: FaissService) -> list[Chunk]:
     print("Retrieving with query: ", query)
@@ -382,7 +350,8 @@ def gather_chunks_orderly(sorted_text_chunks: list[Chunk], sorted_table_chunks: 
 
 
 def create_flowchart_chunks(flowchart_directory) -> list[Chunk]:
-    url = "http://0.0.0.0:8082/generate"
+    # Configured for Qwen 2.5
+    url = f"http://0.0.0.0:{config.vlm_port}/generate"
     headers = {"Content-Type": "application/json"}
     prompt = """You'll be given a page containing a flowchart from a medical document that clinicians use to make decisions.
 
@@ -503,6 +472,7 @@ class HierarchicalFaissService:
         # --- Build Layer 1 Index (Sections) ---
         section_ids = list(self.chunks_by_section.keys())
         # Use section_ids (headings) directly as retrieval strings for Layer 1
+        # Below summaries are generated for a quick check
         self.section_retrieval_strings = [
             "Dieses Kapitel beschreibt die Zielsetzung des Handbuchs als strukturierte Behandlungsanleitung für vaskuläre neurologische Erkrankungen auf der Stroke Unit am Klinikum rechts der Isar. Es basiert auf nationalen (DGN) und internationalen (ESO, AHA) Leitlinien und ergänzt diese durch lokale SOPs. Ziel ist es, die Versorgungsqualität zu verbessern, standardisierte Abläufe zu gewährleisten und Mitarbeitenden eine praxisorientierte Grundlage zu bieten.",
             "Akutdiagnostik umfasst CCT, CTA, CTP, cMRT zur Differenzierung von Ischämie vs. Blutung, Beurteilung von Thrombolyse-/Thrombektomiekandidaten und zur Ursachensuche (TOAST-Kriterien). Weitere Maßnahmen: EKG, TTE, TEE, Duplexsonographie, Labor (inkl. Koagulation, kardiale Marker, Infektparameter), strukturierte Anamnese, Vigilanzkontrolle und standardisierte Aufnahmeprozeduren inkl. NIHSS-Score.",
@@ -636,8 +606,3 @@ class HierarchicalFaissService:
         final_chunks = [chunk for score, chunk in top_k_results]
 
         return final_scores, final_chunks
-
-
-# You might need to adapt the main `retrieve` function and other parts
-# of your code to use `HierarchicalFaissService` instead of `FaissService`
-# and potentially adjust how queries are embedded if needed.
