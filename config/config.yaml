@@ -1,34 +1,49 @@
-inference_type: "exllama" # exllama or ollama
+inference_type: "qwen" # exllama or qwen, applies to question answering
 inference_location: "remote" # remote or local
 llm_path: "" # set only if inference_type is "exllama" and inference_location is "local" # this is actually model paramterer
 
-filter_questions: ["Text", "Table"]
+filter_questions: ["Text", "Table", "Flowchart"]
 filter_questions_based_on: "pages" # categories or pages
 replace_abbreviations: true
 # if true then go grab the saved doc
 inject_whitespace: false
 # if true then go grab the saved doc
 
-experiment_name: additional_pages
+experiment_name: "qwen3_enabled_thinking_32K" # name of the experiment
 
 include_context: false # for generation
 include_preceding_question_answers: true
 
-max_new_tokens: 1024
+max_new_tokens: 32768 # For Qwen otw 1024
 
 # Retrieval
-chunk_method: size # size, section, semantic
+chunk_method: section_and_size # section_and_size # size, section, semantic
 top_k: 5
-optimization_method: # hypothetical_document # decomposing # paraphrasing # stepback # hypothetical_document
-use_original_query_only: true
+optimization_method: hypothetical_document # hypothetical_document # decomposing # paraphrasing # stepback
+use_original_query_only: false # false
 use_original_along_with_optimized: false
 
 most_relevant_chunk_first: false
 summarize_retrieved_documents: false
-match_chunk_similarity_threshold: 95
+match_chunk_similarity_threshold: 93
 chunk_size: 1024
-surrounding_chunk_length: 0
+surrounding_chunk_length: 1
 
 # Set either of the following to true or both to false
 reasoning: false
 thinking: false
+
+saved_chunks_path_raw: all_chunks_1744963045.json
+# ../data/flowchart_longer_hori.json
+# /Users/cisemaltan/workspace/thesis/medical-rag-chatbot/results/flowchart_longer_hori.json
+# /Users/cisemaltan/workspace/thesis/medical-rag-chatbot/results/all_chunks_1744963045.json
+# /Users/cisemaltan/workspace/thesis/medical-rag-chatbot/results/all_chunks_dump.json
+# /Users/cisemaltan/workspace/thesis/medical-rag-chatbot/results/flowchart_1.json
+
+ragas: false
+
+following_flowchart: false
+flowchart_page: #76
+
+llm_port: 8084
+vlm_port: 8082

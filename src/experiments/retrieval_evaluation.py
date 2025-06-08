@@ -10,7 +10,7 @@ sys.path.append(project_root)
 from core.document import get_document
 from services.retrieval import (
     FaissService,
-    retrieve_table_by_summarization,
+    describe_table_for_retrieval,
     gather_chunks_orderly,
     reorder_flowchart_chunks,
     create_flowchart_chunks,
@@ -84,7 +84,7 @@ for method, args in method_args.items():
                 if chunk.type == ChunkType.TEXT:
                     all_chunks.append((chunk.text, chunk))
                 elif chunk.type == ChunkType.TABLE:
-                    all_chunks.append((retrieve_table_by_summarization(chunk, document), chunk))
+                    all_chunks.append((describe_table_for_retrieval(chunk, document), chunk))
                 else:
                     raise ValueError(f"Chunk type {chunk.type} is not implemented yet.")
 

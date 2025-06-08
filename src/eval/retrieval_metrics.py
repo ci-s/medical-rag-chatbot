@@ -3,6 +3,7 @@ from domain.document import Chunk
 from domain.evaluation import Stats, ContextRelevanceResult
 from core.model import generate_response
 from parsing import parse_with_retry, ContextRelevanceResultResponse
+from prompts import CONTEXT_RELEVANCE_PROMPT
 
 
 def does_retrieved_passage_overlap(retrieved_passage: Chunk, reference_pages: list[int]) -> bool:
@@ -45,32 +46,10 @@ def precision(retrieved_passages: list[Chunk], reference_pages: list[int]) -> St
 def context_relevance(
     vignette: Vignette, question: Question, generated_answer: str, retrieved_documents: list[Chunk]
 ) -> ContextRelevanceResult:
-    system_prompt = """
-        Extract sentences from the provided German medical text, categorizing them into ‘relevant’ and ‘irrelevant’ lists based on whether they are useful for answering the question.
-        While extracting sentences you’re not allowed to make any changes to sentences from the given context. Do not deviate from the specified format and make sure to assign each sentence within context either relevant or irrelevant, don't skip.
-        
-        ## Examples
-        Context: Albert Einstein was a German-born theoretical physicist. He developed the theory of relativity, one of the two pillars of modern physics. He was born in Germany in 1879.
-        Question: Where was Albert Einstein born?
-        {
-            "relevant_sentences": ["Albert Einstein was a German-born theoretical physicist.", "He was born in Germany in 1879."],
-            "irrelevant_sentences": ["He developed the theory of relativity, one of the two pillars of modern physics."]
-            }
-
-        Context: The sky is blue due to the scattering of sunlight by the atmosphere. The scattering is more effective at short wavelengths, which is why the sky appears blue.
-        Question: Why is the sky blue?
-        {
-            "relevant_sentences": ["The sky is blue due to the scattering of sunlight by the atmosphere.", "The scattering is more effective at short wavelengths, which is why the sky appears blue."],
-            "irrelevant_sentences": []
-            }
-        
-        Do not say anything else. Make sure the response is a valid JSON.
-    """
-
     context = ". ".join([doc.text for doc in retrieved_documents])
     user_prompt = f"Context: {context}\nQuestion: {question.get_question()}"
 
-    response = generate_response(user_prompt, system_prompt, max_new_tokens=4096)
+    response = generate_response(user_prompt, CONTEXT_RELEVANCE_PROMPT, max_new_tokens=4096)
 
     try:
         response = parse_with_retry(ContextRelevanceResultResponse, response)

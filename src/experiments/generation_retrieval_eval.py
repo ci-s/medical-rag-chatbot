@@ -11,7 +11,7 @@ sys.path.append(project_root)
 from core.document import get_document
 from services.retrieval import (
     FaissService,
-    retrieve_table_by_summarization,
+    describe_table_for_retrieval,
     gather_chunks_orderly,
     reorder_flowchart_chunks,
     create_flowchart_chunks,
@@ -55,13 +55,6 @@ transform_for_generation = False
 
 if config.saved_chunks_path:
     all_chunks = load_saved_chunks(config.saved_chunks_path)
-
-    if transform_for_generation:
-        for text, chunk in all_chunks:
-            if chunk.type == ChunkType.TABLE:
-                chunk.text = describe_table_for_generation(chunk, document)
-
-        save_chunks(all_chunks)
 else:
     chunks = chunk_document(method=config.chunk_method, document=document, pages=pages, chunk_size=config.chunk_size)
 
@@ -75,7 +68,7 @@ else:
         if chunk.type == ChunkType.TEXT:
             all_chunks.append((chunk.text, chunk))
         elif chunk.type == ChunkType.TABLE:
-            summary = retrieve_table_by_summarization(chunk, document)
+            summary = describe_table_for_retrieval(chunk, document)
             if transform_for_generation:
                 chunk.text = describe_table_for_generation(chunk, document)
             all_chunks.append((summary, chunk))

@@ -9,16 +9,10 @@ sys.path.append(project_root)
 
 from core.document import get_document
 from services.retrieval import (
-    FaissService,
     HierarchicalFaissService,
-    retrieve_table_by_summarization,
-    gather_chunks_orderly,
-    reorder_flowchart_chunks,
-    create_flowchart_chunks,
 )
-from core.chunking import chunk_document, load_saved_chunks, tables_to_chunks, save_chunks
+from core.chunking import load_saved_chunks
 from eval.retrieval import evaluate_source
-from domain.document import ChunkType
 
 
 from settings.settings import settings

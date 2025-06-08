@@ -4,6 +4,8 @@ from prompts import (
     RAG_USER_PROMPT,
     QUESTION_PROMPT_w_REASONING,
     QUESTION_PROMPT_w_THINKING,
+    TABLES_DESCRIPTION_GENERATION_PROMPT,
+    TABLES_MARKDOWN_GENERATION_PROMPT,
 )
 from domain.vignette import Vignette, Question
 from domain.document import Chunk, Document
@@ -162,24 +164,6 @@ def create_question_prompt_w_docs_prod(retrieved_documents: Chunk, question: str
 
 
 def describe_table_for_generation(table: Chunk, document: Document):
-    system_prompt = """
-    You'll be given a table along with the context from a medical document that clinicians use to make decisions.
-
-    Given the table in text format and its context, you'll write a detailed description in German. Description requires:
-    - provide a summary first
-    - then convert the table into a paragraph
-
-    Summary should provide an general idea what the table is about and the paragraph should cover all the information in the table.
-
-    Do not deviate from the specified format and respond strictly in the following JSON format:
-
-    {
-        "description": "<Your summary and table in text paragraph here in German>"
-    }
-
-    Do not say anything else. Make sure the response is a valid JSON.\n
-    """
-
     user_prompt = f"""
         The context:\n{
         "\n".join(
@@ -193,7 +177,7 @@ def describe_table_for_generation(table: Chunk, document: Document):
         
         The table content:\n{table.text}
         """  ## start and end page are the same for tables
-    response = generate_response(user_prompt, system_prompt)
+    response = generate_response(user_prompt, TABLES_DESCRIPTION_GENERATION_PROMPT)
     try:
         response = parse_with_retry(TableDescription, response)
         print("Response within summarization: ", response)
@@ -204,24 +188,10 @@ def describe_table_for_generation(table: Chunk, document: Document):
 
 
 def markdown_table_for_generation(table: Chunk, document: Document):
-    system_prompt = """
-    You'll be given a table from a medical document that clinicians use to make decisions. The table can contain footer notes, headers, and other formatting elements.
-
-    Given the table in text format, you'll convert it into markdown format so that it is easier to read and understand. Don't change anything in the table, just convert it into markdown format. Keep the footer notes if there are any.
-
-    Do not deviate from the specified format and respond strictly in the following JSON format:
-
-    {
-        "markdown": "<Table in markdown format here along with footer notes if there are any>"
-    }
-
-    Do not say anything else. Make sure the response is a valid JSON.\n
-    """
-
     user_prompt = f"""
         The table content:\n{table.text}
         """  ## start and end page are the same for tables
-    response = generate_response(user_prompt, system_prompt)
+    response = generate_response(user_prompt, TABLES_MARKDOWN_GENERATION_PROMPT)
     try:
         response = parse_with_retry(TableMarkdown, response)
         print("Response within summarization: ", response)

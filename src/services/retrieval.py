@@ -14,7 +14,14 @@ from domain.vignette import Vignette, Question
 from domain.document import Chunk, ChunkType, Document
 from core.model import generate_response
 from core.generation import create_user_question_prompt
-from prompts import HYPOTHETICAL_DOCUMENT_PROMPT, STEPBACK_PROMPT, DECOMPOSING_PROMPT, PARAPHRASING_PROMPT
+from prompts import (
+    HYPOTHETICAL_DOCUMENT_PROMPT,
+    STEPBACK_PROMPT,
+    DECOMPOSING_PROMPT,
+    PARAPHRASING_PROMPT,
+    TABLES_RETRIEVAL_PROMPT,
+    FLOWCHART_DESCRIPTION_PROMPT,
+)
 from parsing import parse_with_retry, TableDescription, FlowchartDescription
 
 from langchain_core.output_parsers import BaseOutputParser
@@ -267,32 +274,7 @@ def retrieve_and_return_optimized_query(
         return retrieved_documents, new_query
 
 
-def retrieve_table_by_summarization(table: Chunk, document: Document):
-    system_prompt = """
-        You'll be given a table along with the context from a medical document that clinicians use to make decisions.
-
-        Your task is to generate a detailed, structured, and information-rich description in German that maximizes retrieval effectiveness. Your response should include:
-
-        1. A Clear Summary (2-3 sentences):  
-        - Provide a concise yet informative overview of what the table represents.  
-        - Include key medical concepts and terms clinicians might search for.  
-        - Use synonyms and alternative phrasing to capture diverse query formulations.  
-
-        2. A Detailed Table-to-Text Description:  
-        - Convert the table into a well-structured, coherent paragraph.
-        - Group related information together logically instead of listing data row by row.  
-        - Include clear relationships between values (e.g., comparisons, trends, categories).  
-        - Avoid overly mechanical repetition; use descriptive wording and natural transitions. 
-
-        Your response must follow this JSON format strictly:  
-
-        {
-            "description": "<Your summary and table-to-text conversion in German>"
-        }
-        
-        Do not say anything else. Make sure the response is a valid JSON.\n
-    """
-
+def describe_table_for_retrieval(table: Chunk, document: Document):
     user_prompt = f"""
         The context:\n{
         "\n".join(
@@ -306,7 +288,7 @@ def retrieve_table_by_summarization(table: Chunk, document: Document):
         
         The table content:\n{table.text}
         """  ## start and end page are the same for tables
-    response = generate_response(user_prompt, system_prompt)
+    response = generate_response(user_prompt, TABLES_RETRIEVAL_PROMPT)
     try:
         response = parse_with_retry(TableDescription, response)
         print("Response within summarization: ", response)
@@ -353,23 +335,6 @@ def create_flowchart_chunks(flowchart_directory) -> list[Chunk]:
     # Configured for Qwen 2.5
     url = f"http://0.0.0.0:{config.vlm_port}/generate"
     headers = {"Content-Type": "application/json"}
-    prompt = """You'll be given a page containing a flowchart from a medical document that clinicians use to make decisions.
-
-        Your task is to generate a detailed, structured, and information-rich description in German that maximizes retrieval and generation effectiveness. Your response should follow these guidelines:
-
-        - Convert the flowchart into a well-structured, coherent paragraph.
-        - Group related information together logically instead of listing steps.  
-        - Include clear relationships and the order between steps and decisions.
-        - Avoid overly mechanical repetition; use descriptive wording and natural transitions. 
-
-        Your response must follow this JSON format strictly:  
-
-        {
-            "description": "<Your flowchart-to-text conversion in German in one single string>"
-        } <END OF JSON>
-        
-        Do not say anything else. Make sure the response is a valid JSON. Stop immediately at <END OF JSON>.\n
-    """
     flowchart_directory = os.path.join(settings.data_path, "flowcharts")
 
     flowchart_paths = []
@@ -387,7 +352,7 @@ def create_flowchart_chunks(flowchart_directory) -> list[Chunk]:
         with open(flowchart_path, "rb") as img_file:
             img_base64 = base64.b64encode(img_file.read()).decode("utf-8")
 
-        data = {"prompt": prompt, "max_new_tokens": 1024, "image_input": img_base64}
+        data = {"prompt": FLOWCHART_DESCRIPTION_PROMPT, "max_new_tokens": 1024, "image_input": img_base64}
 
         response = requests.post(url, headers=headers, data=json.dumps(data))
         print("Response:", response.text)

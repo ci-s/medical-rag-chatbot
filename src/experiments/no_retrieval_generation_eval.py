@@ -8,19 +8,10 @@ project_root = os.path.abspath(os.path.join(os.getcwd(), ".."))
 sys.path.append(project_root)
 
 from core.document import get_document
-from services.retrieval import (
-    FaissService,
-    retrieve_table_by_summarization,
-    gather_chunks_orderly,
-    reorder_flowchart_chunks,
-)
-from core.chunking import chunk_document, load_saved_chunks, save_chunks, tables_to_chunks
-from core.generation import describe_table_for_generation
-from domain.document import ChunkType, Chunk
 
 from settings.settings import settings
 from settings import get_page_types, config
-from eval.generation import evaluate_single, evaluate_source, evaluate_ragas
+from eval.generation import evaluate_source
 
 # TODO: do it somewhere else in init
 import mlflow
