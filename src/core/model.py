@@ -1,5 +1,6 @@
 import requests
 import json
+import re
 
 from settings.settings import config
 from settings import LLM
@@ -56,44 +57,35 @@ def format_prompt(prompt_format: PromptFormat_llama3, user_prompt, system_prompt
 prompt_format = PromptFormat_llama3()
 
 
-def generate_response(user_prompt: str, system_prompt: str = None, max_new_tokens: int = 1024) -> str:
+def generate_response(user_prompt: str, system_prompt: str = None, max_new_tokens: int = config.max_new_tokens) -> str:
     if config.inference_location == "local":
-        if config.inference_type == "exllama":
-            formatted_prompt = format_prompt(prompt_format, user_prompt, system_prompt, first=True)
-            return LLM.generate(prompt=formatted_prompt, max_new_tokens=config.max_new_tokens, add_bos=True)
-        elif config.inference_type == "ollama":
-            # url = "http://localhost:11434/api/generate"
-            # model_name = "llama3.1"  #:8b-instruct-q4_0
-            # stream = False
-            # data = {
-            #     "model": model_name,
-            #     "prompt": prompt,
-            #     "stream": stream,
-            #     "parameter": ["temperature", 0],
-            #     # "options": {"seed": 42},
-            #     # "format": "json",
-            #     # "raw": True,
-            # }  # "raw": True, "seed", 123
-            # response = requests.post(url, json=data)
-
-            # return response.json()["response"]
-            return LLM.invoke(user_prompt)["output"]  # TODO: messages?
-        else:
-            raise ValueError("Invalid inference type")
+        raise ValueError("Invalid inference type")
     elif config.inference_location == "remote":
-        url = "http://localhost:8082/generate"
-        headers = {"Content-Type": "application/json"}
+        if config.inference_type == "exllama":
+            url = f"http://localhost:{config.llm_port}/generate"
+            headers = {"Content-Type": "application/json"}
+            formatted_prompt = format_prompt(prompt_format, user_prompt, system_prompt, first=True)
+            data = {"prompt": formatted_prompt, "max_new_tokens": max_new_tokens}
 
-        formatted_prompt = format_prompt(prompt_format, user_prompt, system_prompt, first=True)
-        data = {"prompt": formatted_prompt, "max_new_tokens": max_new_tokens}
-        response = requests.post(url, headers=headers, data=json.dumps(data))
-        response_text = response.text.encode("utf-8").decode("utf-8").strip()
-        return response_text
-        # try:
-        #     parsed_response = json.loads(response_text)  # Parse JSON
-        #     if isinstance(parsed_response, str):
-        #         return json.loads(parsed_response.strip())  # Handle double-encoded JSON
-        #     return parsed_response
-        # except json.JSONDecodeError:
-        #     print("Failed to parse response as JSON")
-        #     return response_text
+            response = requests.post(url, headers=headers, data=json.dumps(data))
+            response_text = response.text.encode("utf-8").decode("utf-8").strip()
+
+        elif config.inference_type == "qwen":
+            url = f"http://localhost:{config.vlm_port}/generate"
+            headers = {"Content-Type": "application/json"}
+            data = {
+                "prompt": user_prompt,
+                "max_new_tokens": max_new_tokens,
+                "system_prompt": system_prompt,
+            }
+            response = requests.post(url, headers=headers, data=json.dumps(data))
+            response_list = json.loads(response.text)
+            response_text = response_list[0].strip()
+        else:
+            raise ValueError(f"Invalid inference type: {config.inference_type}")
+
+        cleaned = re.sub(r"^```[\w]*\n|```$", "", response_text)
+        print(f"Response in generate_response: {cleaned}")
+
+        cleaned = re.sub(r"<think>.*?</think>", "", cleaned, flags=re.DOTALL)
+        return cleaned

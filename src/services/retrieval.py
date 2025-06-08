@@ -14,7 +14,14 @@ from domain.vignette import Vignette, Question
 from domain.document import Chunk, ChunkType, Document
 from core.model import generate_response
 from core.generation import create_user_question_prompt
-from prompts import HYPOTHETICAL_DOCUMENT_PROMPT, STEPBACK_PROMPT, DECOMPOSING_PROMPT, PARAPHRASING_PROMPT
+from prompts import (
+    HYPOTHETICAL_DOCUMENT_PROMPT,
+    STEPBACK_PROMPT,
+    DECOMPOSING_PROMPT,
+    PARAPHRASING_PROMPT,
+    TABLES_RETRIEVAL_PROMPT,
+    FLOWCHART_DESCRIPTION_PROMPT,
+)
 from parsing import parse_with_retry, TableDescription, FlowchartDescription
 
 from langchain_core.output_parsers import BaseOutputParser
@@ -129,38 +136,6 @@ class FaissService:
             chunk.index = None
 
         return scores, retrieved_chunks
-
-    # def add_chunks(
-    #     self,
-    #     new_chunks: list[Chunk],
-    #     retrieve_by: Callable[[Chunk], str] = lambda chunk: chunk.section_heading + " " + chunk.text
-    #     if chunk.section_heading
-    #     else chunk.text,
-    # ):
-    #     """Adds new chunks to the existing FAISS index."""
-    #     if new_chunks is None or len(new_chunks) == 0:
-    #         raise ValueError("New chunks cannot be None or empty.")
-
-    #     if self.index is None:
-    #         print("Index not found. Creating a new index...")
-    #         self.create_index(new_chunks, retrieve_by)
-    #         return
-
-    #     # Process new chunks using `retrieve_by`
-    #     new_retrieval_strings = [retrieve_by(chunk) for chunk in new_chunks]
-    #     new_embeddings = embed_chunks(new_retrieval_strings, task_type="search_document")
-
-    #     self.index.add(new_embeddings)
-
-    #     current_length = len(self.chunks)
-    #     # TODO: fix order?
-    #     self.chunks.extend(new_chunks)
-    #     self.retrieval_strings.extend(new_retrieval_strings)
-
-    #     for i, chunk in enumerate(new_chunks, start=current_length):
-    #         chunk.index = i
-
-    #     print(f"Added {len(new_chunks)} new chunks. Total chunks: {len(self.chunks)}")
 
 
 def _retrieve(query: str, faiss_service: FaissService) -> list[Chunk]:
@@ -299,32 +274,7 @@ def retrieve_and_return_optimized_query(
         return retrieved_documents, new_query
 
 
-def retrieve_table_by_summarization(table: Chunk, document: Document):
-    system_prompt = """
-        You'll be given a table along with the context from a medical document that clinicians use to make decisions.
-
-        Your task is to generate a detailed, structured, and information-rich description in German that maximizes retrieval effectiveness. Your response should include:
-
-        1. A Clear Summary (2-3 sentences):  
-        - Provide a concise yet informative overview of what the table represents.  
-        - Include key medical concepts and terms clinicians might search for.  
-        - Use synonyms and alternative phrasing to capture diverse query formulations.  
-
-        2. A Detailed Table-to-Text Description:  
-        - Convert the table into a well-structured, coherent paragraph.
-        - Group related information together logically instead of listing data row by row.  
-        - Include clear relationships between values (e.g., comparisons, trends, categories).  
-        - Avoid overly mechanical repetition; use descriptive wording and natural transitions. 
-
-        Your response must follow this JSON format strictly:  
-
-        {
-            "description": "<Your summary and table-to-text conversion in German>"
-        }
-        
-        Do not say anything else. Make sure the response is a valid JSON.\n
-    """
-
+def describe_table_for_retrieval(table: Chunk, document: Document):
     user_prompt = f"""
         The context:\n{
         "\n".join(
@@ -338,7 +288,7 @@ def retrieve_table_by_summarization(table: Chunk, document: Document):
         
         The table content:\n{table.text}
         """  ## start and end page are the same for tables
-    response = generate_response(user_prompt, system_prompt)
+    response = generate_response(user_prompt, TABLES_RETRIEVAL_PROMPT)
     try:
         response = parse_with_retry(TableDescription, response)
         print("Response within summarization: ", response)
@@ -382,25 +332,9 @@ def gather_chunks_orderly(sorted_text_chunks: list[Chunk], sorted_table_chunks: 
 
 
 def create_flowchart_chunks(flowchart_directory) -> list[Chunk]:
-    url = "http://0.0.0.0:8082/generate"
+    # Configured for Qwen 2.5
+    url = f"http://0.0.0.0:{config.vlm_port}/generate"
     headers = {"Content-Type": "application/json"}
-    prompt = """You'll be given a page containing a flowchart from a medical document that clinicians use to make decisions.
-
-        Your task is to generate a detailed, structured, and information-rich description in German that maximizes retrieval and generation effectiveness. Your response should follow these guidelines:
-
-        - Convert the flowchart into a well-structured, coherent paragraph.
-        - Group related information together logically instead of listing steps.  
-        - Include clear relationships and the order between steps and decisions.
-        - Avoid overly mechanical repetition; use descriptive wording and natural transitions. 
-
-        Your response must follow this JSON format strictly:  
-
-        {
-            "description": "<Your flowchart-to-text conversion in German in one single string>"
-        } <END OF JSON>
-        
-        Do not say anything else. Make sure the response is a valid JSON. Stop immediately at <END OF JSON>.\n
-    """
     flowchart_directory = os.path.join(settings.data_path, "flowcharts")
 
     flowchart_paths = []
@@ -418,7 +352,7 @@ def create_flowchart_chunks(flowchart_directory) -> list[Chunk]:
         with open(flowchart_path, "rb") as img_file:
             img_base64 = base64.b64encode(img_file.read()).decode("utf-8")
 
-        data = {"prompt": prompt, "max_new_tokens": 1024, "image_input": img_base64}
+        data = {"prompt": FLOWCHART_DESCRIPTION_PROMPT, "max_new_tokens": 1024, "image_input": img_base64}
 
         response = requests.post(url, headers=headers, data=json.dumps(data))
         print("Response:", response.text)
@@ -503,6 +437,7 @@ class HierarchicalFaissService:
         # --- Build Layer 1 Index (Sections) ---
         section_ids = list(self.chunks_by_section.keys())
         # Use section_ids (headings) directly as retrieval strings for Layer 1
+        # Below summaries are generated for a quick check
         self.section_retrieval_strings = [
             "Dieses Kapitel beschreibt die Zielsetzung des Handbuchs als strukturierte Behandlungsanleitung für vaskuläre neurologische Erkrankungen auf der Stroke Unit am Klinikum rechts der Isar. Es basiert auf nationalen (DGN) und internationalen (ESO, AHA) Leitlinien und ergänzt diese durch lokale SOPs. Ziel ist es, die Versorgungsqualität zu verbessern, standardisierte Abläufe zu gewährleisten und Mitarbeitenden eine praxisorientierte Grundlage zu bieten.",
             "Akutdiagnostik umfasst CCT, CTA, CTP, cMRT zur Differenzierung von Ischämie vs. Blutung, Beurteilung von Thrombolyse-/Thrombektomiekandidaten und zur Ursachensuche (TOAST-Kriterien). Weitere Maßnahmen: EKG, TTE, TEE, Duplexsonographie, Labor (inkl. Koagulation, kardiale Marker, Infektparameter), strukturierte Anamnese, Vigilanzkontrolle und standardisierte Aufnahmeprozeduren inkl. NIHSS-Score.",
@@ -636,8 +571,3 @@ class HierarchicalFaissService:
         final_chunks = [chunk for score, chunk in top_k_results]
 
         return final_scores, final_chunks
-
-
-# You might need to adapt the main `retrieve` function and other parts
-# of your code to use `HierarchicalFaissService` instead of `FaissService`
-# and potentially adjust how queries are embedded if needed.

@@ -11,9 +11,10 @@ sys.path.append(project_root)
 from core.document import get_document
 from services.retrieval import (
     FaissService,
-    retrieve_table_by_summarization,
+    describe_table_for_retrieval,
     gather_chunks_orderly,
     reorder_flowchart_chunks,
+    create_flowchart_chunks,
 )
 from core.chunking import chunk_document, load_saved_chunks, save_chunks, tables_to_chunks
 from core.generation import describe_table_for_generation
@@ -47,19 +48,13 @@ print(f"Number of pages: {len(pages)}")
 
 document = get_document(file_path, pages)
 
-chunks_saved = True
+if not config.saved_chunks_path:
+    raise ValueError("This setting requires manual configuration: transform_for_generation")
+
 transform_for_generation = False
 
-if chunks_saved:
+if config.saved_chunks_path:
     all_chunks = load_saved_chunks(config.saved_chunks_path)
-    # all_chunks = reorder_flowchart_chunks(_all_chunks)
-
-    if transform_for_generation:
-        for text, chunk in all_chunks:
-            if chunk.type == ChunkType.TABLE:
-                chunk.text = describe_table_for_generation(chunk, document)
-
-        save_chunks(all_chunks)
 else:
     chunks = chunk_document(method=config.chunk_method, document=document, pages=pages, chunk_size=config.chunk_size)
 
@@ -73,12 +68,18 @@ else:
         if chunk.type == ChunkType.TEXT:
             all_chunks.append((chunk.text, chunk))
         elif chunk.type == ChunkType.TABLE:
-            summary = retrieve_table_by_summarization(chunk, document)
+            summary = describe_table_for_retrieval(chunk, document)
             if transform_for_generation:
                 chunk.text = describe_table_for_generation(chunk, document)
             all_chunks.append((summary, chunk))
         else:
             raise ValueError(f"Chunk type {chunk.type} is not implemented yet.")
+    flowchart_directory = os.path.join(settings.data_path, "flowcharts")
+    fchunks = create_flowchart_chunks(flowchart_directory)
+    for fchunk in fchunks:
+        all_chunks.append((fchunk.text, fchunk))
+
+    all_chunks = reorder_flowchart_chunks(all_chunks)
     save_chunks(all_chunks)
 
 faiss_service = FaissService()
@@ -143,7 +144,6 @@ with open(output_path, "w") as file:
     json.dump(
         {
             "avg_generation_score": avg_score if not ragas else avg_scores,
-
             "avg_retrieval_recall": avg_recall,
             "avg_retrieval_precision": avg_precision,
             "all_feedbacks": [feedback.to_dict() for feedback in all_feedbacks],

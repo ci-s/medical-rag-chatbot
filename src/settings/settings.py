@@ -72,6 +72,9 @@ class Config(BaseModel):
     following_flowchart: bool = False
     flowchart_page: int | None = None
 
+    llm_port: int = 8084
+    vlm_port: int = 8082
+
     def dump(self, file_path: str) -> None:
         with open(file_path, "w", encoding="utf-8") as file:
             yaml.dump(self.model_dump(), file, default_flow_style=False, allow_unicode=True)

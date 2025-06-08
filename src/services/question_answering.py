@@ -14,6 +14,7 @@ class RAGAnswer(NamedTuple):
     references: dict[int, str]  # page number, chunk type i.e. 15: "table"
     reasoning: str | None = None
 
+
 def generate_rag_answer(
     question: str,
     faiss_service: FaissService,
@@ -36,9 +37,7 @@ def generate_rag_answer(
     else:
         retrieved_documents: list[Chunk] = _retrieve(question, faiss_service)
 
-
     references = {retrieved_doc.start_page: retrieved_doc.type for retrieved_doc in retrieved_documents}
-
 
     system_prompt, user_prompt = create_question_prompt_w_docs_prod(retrieved_documents, augmented_question)
     generated_answer = generate_response(user_prompt, system_prompt)
@@ -228,12 +227,12 @@ class ConversationService:
             if reasoning:
                 quick_answer["reasoning"] = reasoning
 
+        print(f"Creating conversation with ID {id} and question: {question}")
         if config.following_flowchart:
             print("Following the flowchart")
             followup_question = generate_followup_questions_following_the_flowchart(question, self.document_index)
         else:
             followup_question = generate_followup_questions_if_needed(question, self.document_index)
-
 
         if followup_question is not None:
             self.last_detail_id += 1
@@ -250,7 +249,7 @@ class ConversationService:
             # No follow-up needed → generate final answer immediately
 
             generated_answer, references, reasoning = generate_rag_answer(
-                question, self.document_index, config.flowchart_page
+                question, self.document_index, question, config.flowchart_page
             )
 
             on_update(generated_answer, references, None, reasoning)

@@ -89,6 +89,10 @@ def evaluate_single_combined(
         }
     generation_feedback = llm_as_a_judge(vignette, question, generated_answer.answer, document)
 
+    if generation_feedback.score < 1 or generation_feedback.score > 5:
+        print(f"Invalid score: {generation_feedback.score} for question {question.get_id()}. Trying again.")
+        generation_feedback = llm_as_a_judge(vignette, question, generated_answer.answer, document)
+
     return EvalResult(
         feedback=generation_feedback.text,
         question_id=question.get_id(),
