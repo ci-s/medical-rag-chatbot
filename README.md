@@ -49,6 +49,11 @@ medical-rag-chatbot/
 └── README.md           # Project documentation
 ```
 
+## Containerization
+docker compose up -d
+
+It doesn't work on Mac due to gpt4all's requirements.
+
 
 ## License
 
