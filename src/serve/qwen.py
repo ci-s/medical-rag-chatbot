@@ -51,24 +51,33 @@ stopping_criteria = StoppingCriteriaList([StopOnCurlyBrace(processor.tokenizer)]
 # signal.signal(signal.SIGALRM, handler)
 # signal.alarm(300) 
     
-def format_prompt(prompt: str, image_input) -> list:
-    image_data = base64.b64decode(image_input)
-    image = Image.open(BytesIO(image_data)).convert("RGB")
+def format_prompt(prompt: str, image_input: str | None, system_prompt: str | None) -> list:
+    if image_input:
+        image_data = base64.b64decode(image_input)
+        image = Image.open(BytesIO(image_data)).convert("RGB")
 
-    return [
-        {
-            "role": "user",
-            "content": [
-                {
-                    "type": "image",
-                    "image": image,
-                },
-                {"type": "text", "text": prompt},
-            ],
-        }
-    ]
-
-
+        return [
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "image",
+                        "image": image,
+                    },
+                    {"type": "text", "text": prompt},
+                ],
+            }
+        ]
+    else:
+        return [
+            {"role": "system", "content": "You are a helpful assistant." if not system_prompt else system_prompt},
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": prompt},
+                ],
+            }
+        ]
 
 app = FastAPI()
 @app.get("/")
@@ -79,23 +88,31 @@ def read_root():
 async def generate(request: Request) -> Response:
     request_dict = await request.json()
     prompt = request_dict.pop("prompt")
-    image_input = request_dict.pop("image_input")
+    system_prompt = request_dict.pop("system_prompt", None)
+    image_input = request_dict.pop("image_input", None)
     max_new_tokens = request_dict.pop("max_new_tokens")
     
     
-    formatted_messages = format_prompt(prompt, image_input)
-    
+    formatted_messages = format_prompt(prompt, image_input, system_prompt)
+    print(f"Formatted messages: {formatted_messages}")
     text = processor.apply_chat_template(
         formatted_messages, tokenize=False, add_generation_prompt=True
     )
-    image_inputs, _ = process_vision_info(formatted_messages)
-    inputs = processor(
-        text=[text],
-        images=image_inputs,
-        #videos=video_inputs,
-        padding=True,
-        return_tensors="pt",
-    )
+    if image_input:
+        image_inputs, _ = process_vision_info(formatted_messages)
+        inputs = processor(
+            text=[text],
+            images=image_inputs,
+            #videos=video_inputs,
+            padding=True,
+            return_tensors="pt",
+        )
+    else:
+        inputs = processor(
+            text=[text],
+            padding=True,
+            return_tensors="pt",
+        )
     inputs = inputs.to("cuda")
     
     # try:
