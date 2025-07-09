@@ -19,12 +19,8 @@ uv sync
 ```
 
 ### Usage
-
-```bash
-python main.py
-```
-
-Follow the prompts to interact with the chatbot.
+MLFlow: in experiments directory → uv run mlflow server --host 127.0.0.1 --port 8080
+Backend: in serve directory → uv run uvicorn app:app --port 7001 --reload --host 0.0.0.0
 
 ## Project Structure
 
